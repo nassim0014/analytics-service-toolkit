@@ -1,0 +1,98 @@
+"""Common settings base class for KINZ-style Python services.
+
+Every service in this portfolio currently hand-rolls its own `.env` loading
+with `pydantic`. This module gives them a shared base with the fields that
+show up in all of them (app name, env, log level, database URL, Slack
+webhook) plus a `load_settings()` helper that turns pydantic's validation
+errors into a message a human can act on without reading a traceback.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from typing import Literal, TypeVar
+
+from pydantic import PostgresDsn, SecretStr, ValidationError
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+T = TypeVar("T", bound="BaseServiceSettings")
+
+_REDACTED = "***"
+
+
+class SettingsError(Exception):
+    """Raised by :func:`load_settings` with a human-readable summary of what's wrong.
+
+    Wraps the underlying ``pydantic.ValidationError`` (available as
+    ``__cause__``) so callers who want the raw error details still have them.
+    """
+
+
+class BaseServiceSettings(BaseSettings):
+    """Fields every service needs. Subclass and add service-specific fields.
+
+    Example:
+        class MyServiceSettings(BaseServiceSettings):
+            app_name: str = "margin-guardian"
+            shopify_api_key: str
+
+        settings = load_settings(MyServiceSettings)
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    app_name: str = "service"
+    env: Literal["dev", "staging", "prod"] = "dev"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    database_url: PostgresDsn | None = None
+    slack_webhook_url: SecretStr | None = None
+
+    def __repr__(self) -> str:
+        parts = []
+        for name in type(self).model_fields:
+            value = getattr(self, name)
+            if name == "database_url" and value is not None:
+                value = _redact_dsn(str(value))
+            elif name == "slack_webhook_url" and value is not None:
+                value = _REDACTED
+            parts.append(f"{name}={value!r}")
+        return f"{type(self).__name__}({', '.join(parts)})"
+
+
+def _redact_dsn(dsn: str) -> str:
+    """Replace the password segment of a DSN with '***', leaving the rest readable."""
+    return re.sub(r"://([^:/@\s]+):([^@\s]+)@", r"://\1:***@", dsn)
+
+
+def load_settings(cls: type[T], env_file: str | Path = ".env") -> T:
+    """Instantiate ``cls`` from the environment / an env file.
+
+    Raises :class:`SettingsError` with a readable summary (missing vars,
+    invalid values) instead of letting a raw ``pydantic.ValidationError``
+    escape. This is the function every service's ``config.py`` should call
+    instead of ``MySettings()`` directly.
+    """
+    try:
+        return cls(_env_file=env_file)  # type: ignore[call-arg]
+    except ValidationError as exc:
+        missing: list[str] = []
+        invalid: list[str] = []
+        for err in exc.errors():
+            loc = ".".join(str(part) for part in err["loc"])
+            if err["type"] == "missing":
+                missing.append(loc)
+            else:
+                invalid.append(f"{loc}: {err['msg']}")
+
+        lines = [f"Invalid configuration for {cls.__name__} (from {env_file}):"]
+        if missing:
+            lines.append("  missing required variables: " + ", ".join(missing))
+        if invalid:
+            lines.append("  invalid values:")
+            lines.extend(f"    - {item}" for item in invalid)
+        raise SettingsError("\n".join(lines)) from exc
