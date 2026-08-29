@@ -1,5 +1,7 @@
 import time
 
+import pytest
+
 from astk.alerts import Alert, ConsoleNotifier, Deduplicator, SlackNotifier
 
 
@@ -84,6 +86,32 @@ def test_slack_notifier_dry_run_sends_nothing():
 
     assert result.ok is True
     assert client.calls == []
+
+
+def test_slack_notifier_rejects_the_masked_secret_string():
+    """Regression proof for the silent-alert-loss trap.
+
+    On the OLD code `SlackNotifier("**********")` constructs fine and only fails at
+    send time — returning `AlertResult(ok=False)` and raising nothing, so a service
+    wired per the old README loses every alert silently. The fix rejects the URL at
+    construction, where the mistake is still visible.
+    """
+    with pytest.raises(ValueError, match="http"):
+        SlackNotifier("**********")
+
+
+def test_slack_notifier_rejects_a_non_url_string():
+    with pytest.raises(ValueError):
+        SlackNotifier("not-a-url")
+
+
+def test_slack_notifier_accepts_a_real_https_url():
+    # The happy path must be untouched.
+    client = _FakeClient([200])
+    result = SlackNotifier(
+        "https://hooks.slack.com/x", client=client, backoff_base=0
+    ).send(Alert(title="t", body="b"))
+    assert result.ok is True
 
 
 def test_deduplicator_suppresses_repeat_within_ttl():
