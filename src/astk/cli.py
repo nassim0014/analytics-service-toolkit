@@ -34,10 +34,14 @@ def doctor(
         rows.append(("database", "skipped", "DATABASE_URL not set"))
 
     if slack_webhook_url:
-        notifier = SlackNotifier(slack_webhook_url, dry_run=True)
-        check_alert = Alert(title="astk doctor", body="connectivity check", severity="info")
-        result = notifier.send(check_alert)
-        rows.append(("slack", "ok" if result.ok else "FAIL", "dry-run"))
+        try:
+            notifier = SlackNotifier(slack_webhook_url, dry_run=True)
+        except ValueError as exc:
+            rows.append(("slack", "FAIL", str(exc).splitlines()[0]))
+        else:
+            check_alert = Alert(title="astk doctor", body="connectivity check", severity="info")
+            result = notifier.send(check_alert)
+            rows.append(("slack", "ok" if result.ok else "FAIL", "dry-run"))
     else:
         rows.append(("slack", "skipped", "SLACK_WEBHOOK_URL not set"))
 
