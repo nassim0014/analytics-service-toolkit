@@ -32,7 +32,9 @@ replacement for it.
   with `app_name`, `env`, `log_level`, `database_url`, `slack_webhook_url`)
   and `load_settings()`, which turns a `pydantic.ValidationError` into a
   readable "missing: X, Y / invalid: Z" message instead of a raw traceback.
-  Secrets are redacted in `repr()`.
+  Secrets are redacted in `repr()`. Read the real values back with
+  `settings.dsn()` and `settings.slack_webhook()` — never `str()` on the raw
+  field, which gives you `"**********"` for the `SecretStr` webhook.
 - **`astk.db`** — `make_engine()` (cached per URL, SQLite-in-memory-safe),
   `session_scope()` (commit/rollback contextmanager), `fetch_df()` (SQL →
   pandas DataFrame), `healthcheck()`, and `wait_for_db()` (polls until the
@@ -73,12 +75,12 @@ class MySettings(BaseServiceSettings):
     app_name: str = "my-service"
 
 settings = load_settings(MySettings)
-engine = make_engine(str(settings.database_url))
+engine = make_engine(settings.dsn())          # .dsn() unwraps database_url (raises if unset)
 wait_for_db(engine, timeout_s=30)
 
 df = fetch_df(engine, "SELECT * FROM products LIMIT 10")
 
-notifier = SlackNotifier(str(settings.slack_webhook_url))
+notifier = SlackNotifier(settings.slack_webhook())  # .slack_webhook() unwraps the SecretStr
 dedup = Deduplicator(ttl_s=3600)
 if dedup.should_send("margin:low"):
     notifier.send(Alert(title="Margin alert", body="B2C margin below 10%", severity="critical"))

@@ -93,6 +93,15 @@ class SlackNotifier:
         backoff_base: float = 0.5,
         client: httpx.Client | None = None,
     ) -> None:
+        if not isinstance(webhook_url, str) or not webhook_url.startswith(
+            ("http://", "https://")
+        ):
+            raise ValueError(
+                "SlackNotifier webhook_url must be an http:// or https:// URL, got "
+                f"{webhook_url!r}. A common cause is passing str(settings.slack_webhook_url) "
+                "on a pydantic SecretStr (which yields '**********'); use "
+                "settings.slack_webhook() instead."
+            )
         self.webhook_url = webhook_url
         self.dry_run = dry_run
         self.max_retries = max_retries

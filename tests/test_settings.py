@@ -58,3 +58,39 @@ def test_secrets_redacted_in_repr(monkeypatch, tmp_path):
     assert "XXXXXXXX" not in rendered
     assert "appuser" in rendered  # username isn't secret, stays readable
     assert "***" in rendered
+
+
+class _WithConns(BaseServiceSettings):
+    pass
+
+
+def test_slack_webhook_accessor_unwraps_the_secret(monkeypatch):
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+    s = _WithConns(slack_webhook_url="https://hooks.slack.com/x")
+
+    # The trap the accessor exists to avoid: str() on a pydantic SecretStr is the mask,
+    # not the URL. This assertion documents pydantic's behaviour and holds on any version.
+    assert str(s.slack_webhook_url) == "**********"
+
+    assert s.slack_webhook() == "https://hooks.slack.com/x"
+    assert s.slack_webhook() != "**********"
+
+
+def test_slack_webhook_accessor_is_none_when_unset(monkeypatch):
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+    assert _WithConns().slack_webhook() is None
+
+
+def test_dsn_accessor_returns_a_plain_connection_string(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    s = _WithConns(database_url="postgresql://appuser:hunter2@localhost:5432/db")
+    assert s.dsn() == "postgresql://appuser:hunter2@localhost:5432/db"
+
+
+def test_dsn_accessor_raises_readable_error_when_unset(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with pytest.raises(SettingsError) as exc_info:
+        _WithConns().dsn()
+    message = str(exc_info.value)
+    assert "database_url" in message or "DATABASE_URL" in message
+    assert message != "None"
