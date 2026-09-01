@@ -4,6 +4,12 @@ Ranked backlog for `analytics-service-toolkit` (`astk`) after v1 scaffolding. It
 
 Current state at time of writing: 36 passed / 1 skipped, 89% coverage, ruff-clean, CI green, install-from-git only, zero real consumers.
 
+**Progress (2026-08-27):** item 2 done (see below). Item 1 is **blocked on the genesis loop**
+— `kinz-price-bridge` is registered `in_rotation: false` and orphaned-empty pending genesis
+adopting and scaffolding it; the closed loop must not create that repo's content. The next
+independently-actionable item for *this* repo is **3** (verify `docs/ADOPTION.md` against real
+source), then **4** (version contract).
+
 ---
 
 ## 1. Prove `astk` works inside a real consuming repo (`kinz-price-bridge`)
@@ -22,15 +28,37 @@ Current state at time of writing: 36 passed / 1 skipped, 89% coverage, ruff-clea
 
 ---
 
-## 2. Verify and fix `dashboard.cached_query()` — suspected broken caching
+## 2. ~~Verify and fix `dashboard.cached_query()` — suspected broken caching~~ ✅
 
-**What to do.** `cached_query()` currently defines a nested function inside the call and wraps it in `st.cache_data` on every invocation. `st.cache_data` keys its cache on the wrapped function's identity/qualified name plus its bytecode hash, so a freshly created closure per call is very likely to produce a cache that never hits across Streamlit reruns — meaning every rerun re-executes the SQL while still paying the hashing overhead.
+**Done 2026-08-27 (closed loop, laptop).**
 
-1. Write a failing-first test: monkeypatch `fetch_df` with a call counter, invoke `cached_query()` twice with identical SQL and params (simulating two reruns), and assert the counter is `1`. Use `streamlit.testing.v1.AppTest` for a rerun-realistic path if the unit-level harness is not convincing.
-2. If it hits once, the concern is disproven — leave the code alone and record the test plus a comment explaining why the pattern is safe, so this doesn't get re-litigated.
-3. If it hits twice (expected), refactor to a single module-level function decorated once with `@st.cache_data`, taking only hashable arguments — `(url: str, sql: str, params: tuple)`. Any unhashable argument (engine, connection, session) must either be reconstructed inside from the URL via the already-cached `make_engine()`, or be passed with a leading-underscore parameter name so Streamlit excludes it from the hash key. Expose `ttl` and `show_spinner` as pass-throughs.
+**Verified — the "cache never hits" hypothesis was wrong.** `st.cache_data` keys its
+namespace on the wrapped function's `__module__` + `__qualname__` + source hash, all of
+which are stable across a re-created closure, so repeated identical calls *did* hit the
+cache. `test_cached_query_reuses_the_cache_on_a_repeated_identical_call` pins this and
+passes against the pre-fix code too.
 
-**Why second.** This is a plausible latent correctness/performance bug in the one module whose entire purpose is to make dashboards fast, and it is silent: nothing fails, the dashboard just quietly hammers the database on every widget interaction. It will be discovered by a consumer under load, at which point it looks like the shared library made things worse than the hand-rolled code it replaced — the single worst outcome for adoption. It is also cheap to settle definitively, and settling it either way (fix or documented test) is progress.
+**But there was a real, silent correctness bug:** `engine` was captured in the per-call
+closure — *outside* the `st.cache_data` key — so a second engine pointed at a different
+database silently received the first engine's rows
+(`test_cached_query_does_not_serve_one_engines_rows_to_another`: `assert 1 == 2` against
+old code). `cached_query` also had no `params` argument at all, so parameterised queries
+couldn't be cached correctly.
+
+**Fix.** Single module-level `_cached_fetch_df(_engine, url, sql, params)` decorated once
+with `@st.cache_data`. Public signature is now `cached_query(engine, sql, params=None)` —
+keyed on `(str(engine.url), sql, sorted(params))`, all hashable; `_engine` rides along
+under a leading-underscore name so Streamlit skips it in the hash. `ttl` is now the module
+constant `CACHED_QUERY_TTL_S` (60s, unchanged default) because `st.cache_data` only takes
+`ttl` at decoration time — see the docstring.
+
+**Breaking change** (acceptable — zero consumers, function was unused even by the demo):
+the third positional arg went from `ttl_s: int` to `params: dict | None`. Fold this into
+item 4's `CHANGELOG.md` `0.1.0`/Unreleased entry when that lands.
+
+Tests: `tests/test_dashboard.py` +4 (40 passed / 1 skipped, 91% coverage, was 89%).
+`streamlit.testing.v1.AppTest` was not needed — the bare-mode cache with a monkeypatched
+`fetch_df` counter reproduces rerun behaviour faithfully.
 
 ---
 

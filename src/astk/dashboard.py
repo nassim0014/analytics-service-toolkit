@@ -109,13 +109,44 @@ def sidebar_filters(options: dict[str, list]) -> dict:
     return result
 
 
-def cached_query(engine, sql: str, ttl_s: int = 60):
-    """`fetch_df`, wrapped in `st.cache_data` so repeated reruns don't re-hit Postgres."""
+#: Default cache lifetime for :func:`cached_query`. Fixed at module scope
+#: because ``st.cache_data`` only accepts ``ttl`` at decoration time, not per
+#: call — see the note in :func:`cached_query`.
+CACHED_QUERY_TTL_S = 60
+
+
+if _HAS_STREAMLIT:
+
+    @st.cache_data(ttl=CACHED_QUERY_TTL_S, show_spinner=False)
+    def _cached_fetch_df(_engine, url: str, sql: str, params: tuple[tuple[str, object], ...]):
+        # `_engine` has a leading underscore so st.cache_data skips it when
+        # hashing the call (it is unhashable, and `url` already identifies it);
+        # `url` + `sql` + `params` are the real, fully-hashable cache key.
+        from . import db as _db
+
+        return _db.fetch_df(_engine, sql, dict(params) or None)
+
+else:  # pragma: no cover - exercised via the astk[streamlit] extra
+
+    def _cached_fetch_df(_engine, url, sql, params):
+        raise RuntimeError("streamlit is not installed")
+
+
+def cached_query(engine, sql: str, params: dict[str, object] | None = None):
+    """`fetch_df`, wrapped in `st.cache_data` so repeated reruns don't re-hit Postgres.
+
+    The cache is keyed on ``(str(engine.url), sql, params)`` — all hashable — so
+    two dashboards pointed at different databases, or the same SQL run with
+    different bind parameters, never collide on a stale cached result. The engine
+    object is passed straight through (Streamlit ignores the leading-underscore
+    parameter it lands in); ``make_engine`` already caches one engine per URL.
+
+    ``ttl`` is fixed at :data:`CACHED_QUERY_TTL_S`: ``st.cache_data`` bakes ``ttl``
+    in at decoration time, so it cannot be a per-call argument without recreating
+    the cache wrapper on every call — which is exactly the bug this function used
+    to have (a fresh closure per invocation, with ``engine`` captured *outside*
+    the cache key, so a second engine silently reused the first engine's rows).
+    """
     _require_streamlit()
-    from . import db as _db
-
-    @st.cache_data(ttl=ttl_s)
-    def _run(sql_text: str):
-        return _db.fetch_df(engine, sql_text)
-
-    return _run(sql)
+    key_params = tuple(sorted((params or {}).items()))
+    return _cached_fetch_df(engine, str(engine.url), sql, key_params)
