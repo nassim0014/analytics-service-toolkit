@@ -63,6 +63,33 @@ class BaseServiceSettings(BaseSettings):
             parts.append(f"{name}={value!r}")
         return f"{type(self).__name__}({', '.join(parts)})"
 
+    def dsn(self) -> str:
+        """Return the database URL as a plain connection string ready for ``make_engine``.
+
+        Exists because ``database_url`` is a ``PostgresDsn | None``: ``str()`` on an
+        unset value yields the literal ``"None"`` (which ``create_engine`` then chokes
+        on with an opaque message), and callers otherwise have to remember the field is
+        optional. This raises a readable :class:`SettingsError` instead.
+        """
+        if self.database_url is None:
+            raise SettingsError(
+                f"{type(self).__name__}.dsn() called but database_url is not set "
+                "(set the DATABASE_URL environment variable or the database_url field)"
+            )
+        return str(self.database_url)
+
+    def slack_webhook(self) -> str | None:
+        """Return the real Slack webhook URL, or ``None`` if none is configured.
+
+        Exists because ``slack_webhook_url`` is a ``SecretStr``: in pydantic v2
+        ``str(secret)`` returns the mask ``"**********"``, not the URL, so the obvious
+        ``SlackNotifier(str(settings.slack_webhook_url))`` silently builds a notifier
+        that can never deliver. Call this instead — it unwraps the secret.
+        """
+        if self.slack_webhook_url is None:
+            return None
+        return self.slack_webhook_url.get_secret_value()
+
 
 def _redact_dsn(dsn: str) -> str:
     """Replace the password segment of a DSN with '***', leaving the rest readable."""
