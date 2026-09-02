@@ -94,3 +94,18 @@ def test_dsn_accessor_raises_readable_error_when_unset(monkeypatch):
     message = str(exc_info.value)
     assert "database_url" in message or "DATABASE_URL" in message
     assert message != "None"
+
+
+def test_database_url_accepts_sqlite(monkeypatch):
+    # SQLite must be accepted: services test on it and astk.db is SQLite-safe.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    s = _WithConns(database_url="sqlite:////tmp/app.db")
+    assert s.dsn() == "sqlite:////tmp/app.db"
+
+
+def test_database_url_still_validates_a_bad_postgres_url(monkeypatch):
+    from pydantic import ValidationError
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with pytest.raises(ValidationError):
+        _WithConns(database_url="postgresql://")  # no host -> invalid

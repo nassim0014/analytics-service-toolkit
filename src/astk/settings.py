@@ -13,8 +13,12 @@ import re
 from pathlib import Path
 from typing import Literal, TypeVar
 
-from pydantic import PostgresDsn, SecretStr, ValidationError
+from pydantic import PostgresDsn, SecretStr, TypeAdapter, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Reused to validate Postgres URLs while still accepting sqlite:// — see
+# BaseServiceSettings.database_url below.
+_POSTGRES_DSN = TypeAdapter(PostgresDsn)
 
 T = TypeVar("T", bound="BaseServiceSettings")
 
@@ -49,8 +53,25 @@ class BaseServiceSettings(BaseSettings):
     app_name: str = "service"
     env: Literal["dev", "staging", "prod"] = "dev"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    database_url: PostgresDsn | None = None
+    # A plain str, not PostgresDsn: these services run Postgres in prod but SQLite
+    # in tests (and astk.db.make_engine is SQLite-safe by design). A PostgresDsn
+    # field would reject `sqlite:///…` at load time and force every consumer to
+    # override it. The validator below keeps the readable Postgres error for the
+    # common case while letting sqlite (and other schemes) through.
+    database_url: str | None = None
     slack_webhook_url: SecretStr | None = None
+
+    @field_validator("database_url")
+    @classmethod
+    def _accept_sqlite_or_validate_postgres(cls, v: str | None) -> str | None:
+        if v is None or v.startswith("sqlite"):
+            return v
+        if v.startswith(("postgresql", "postgres")):
+            # Reuse pydantic's PostgresDsn validation for its readable error,
+            # but return the original string so SQLAlchemy gets exactly what the
+            # user set (PostgresDsn normalisation can append a trailing slash).
+            _POSTGRES_DSN.validate_python(v)
+        return v
 
     def __repr__(self) -> str:
         parts = []

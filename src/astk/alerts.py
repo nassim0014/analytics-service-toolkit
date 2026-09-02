@@ -73,7 +73,11 @@ def _build_payload(alert: Alert) -> dict:
                 ],
             }
         )
-    return {"blocks": blocks, "attachments": [{"color": color}]}
+    # Nest the blocks INSIDE the attachment so Slack renders the coloured
+    # severity bar. A top-level `blocks` list with a separate `{"color": …}`
+    # attachment (the previous shape) drew no colour at all — Slack only tints
+    # content that lives inside the attachment.
+    return {"attachments": [{"color": color, "blocks": blocks}]}
 
 
 class SlackNotifier:
@@ -106,7 +110,21 @@ class SlackNotifier:
         self.dry_run = dry_run
         self.max_retries = max_retries
         self.backoff_base = backoff_base
+        # Only close a client we created; a caller-supplied client stays the
+        # caller's to manage.
+        self._owns_client = client is None
         self._client = client or httpx.Client(timeout=10)
+
+    def close(self) -> None:
+        """Close the underlying httpx client if this notifier created it."""
+        if self._owns_client:
+            self._client.close()
+
+    def __enter__(self) -> SlackNotifier:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
     def send(self, alert: Alert) -> AlertResult:
         if self.dry_run:
@@ -119,21 +137,24 @@ class SlackNotifier:
                 response = self._client.post(self.webhook_url, json=payload)
             except httpx.HTTPError as exc:
                 last_error = str(exc)
-                self._sleep(attempt)
+                self._sleep_if_retrying(attempt)
                 continue
 
             if response.status_code < 300:
                 return AlertResult(ok=True, attempts=attempt)
             if response.status_code == 429 or response.status_code >= 500:
                 last_error = f"HTTP {response.status_code}"
-                self._sleep(attempt)
+                self._sleep_if_retrying(attempt)
                 continue
             # Non-retryable (4xx other than 429): stop immediately.
             return AlertResult(ok=False, attempts=attempt, error=f"HTTP {response.status_code}")
 
         return AlertResult(ok=False, attempts=self.max_retries, error=last_error)
 
-    def _sleep(self, attempt: int) -> None:
+    def _sleep_if_retrying(self, attempt: int) -> None:
+        # No point sleeping after the final attempt — there is no retry after it.
+        if attempt >= self.max_retries:
+            return
         if self.backoff_base:
             time.sleep(self.backoff_base * (2 ** (attempt - 1)))
 
