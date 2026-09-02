@@ -128,6 +128,26 @@ Tests: `tests/test_dashboard.py` +4 (40 passed / 1 skipped, 91% coverage, was 89
 
 ---
 
+## Landed 2026-09-02 (toolkit self-audit)
+
+Found while auditing astk from the outside (`ASTK_TOOLKIT_AUDIT.md` in the
+workspace); all fixed with tests in one PR. Coverage 91% → 92%.
+
+- **`settings.database_url` accepts SQLite.** Was `PostgresDsn`-only, which
+  rejected the `sqlite:///…` URLs every service uses in tests (and that
+  `db.make_engine` is built to handle) — forcing each consumer to override the
+  field. Now a validated `str`: Postgres URLs still get pydantic's readable
+  error, sqlite passes through.
+- **Slack severity colour now renders.** `_build_payload` put `blocks` at top
+  level with the colour on an empty attachment, so Slack drew no bar. Blocks now
+  nest inside the coloured attachment. _(Worth a live-webhook eyeball.)_
+- **`db.healthcheck(timeout_s)` is now honoured.** The parameter was dead; a
+  hung connect ignored it and blocked. Now bounded on a worker thread
+  (`shutdown(wait=False)` so the timeout isn't re-joined away).
+- **`SlackNotifier` no longer sleeps after its final attempt** (wasted backoff),
+  and gained `close()` + context-manager support so a self-created httpx client
+  is cleaned up (a caller-supplied one is left alone).
+
 ## Deliberately not on this list
 
 Recorded so this doesn't get re-opened as "missing features" on a later pass. Each is a real gap; none is worth building on spec.
