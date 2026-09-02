@@ -93,3 +93,31 @@ def test_wait_for_db_times_out_and_returns_false():
     engine = _FlakyEngine(fail_times=1000)
     assert wait_for_db(engine, timeout_s=0.05, interval_s=0.01) is False
     assert engine.calls > 0
+
+
+# --- audit-fix coverage: healthcheck honours its timeout --------------------
+
+import time as _time  # noqa: E402
+
+
+class _SlowEngine:
+    """Engine whose connect() blocks — models a hung TCP connect to a dead DB."""
+
+    def __init__(self, delay_s: float) -> None:
+        self.delay_s = delay_s
+
+    def connect(self):
+        _time.sleep(self.delay_s)
+        return _FakeConnection()
+
+
+def test_healthcheck_times_out_promptly_on_a_slow_engine():
+    engine = _SlowEngine(delay_s=2.0)
+    start = _time.monotonic()
+    assert healthcheck(engine, timeout_s=0.1) is False
+    # It must give up near the timeout, not wait the full 2s.
+    assert _time.monotonic() - start < 1.0
+
+
+def test_healthcheck_zero_timeout_runs_inline(sqlite_engine):
+    assert healthcheck(sqlite_engine, timeout_s=0) is True
