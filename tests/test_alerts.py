@@ -37,8 +37,13 @@ def test_slack_notifier_success_first_try():
     assert result.ok is True
     assert result.attempts == 1
     payload = client.calls[0][1]
-    assert payload["blocks"]
-    assert payload["attachments"][0]["color"] == "#dc2626"
+    # Blocks live INSIDE the coloured attachment so Slack renders the severity
+    # bar; there is no top-level `blocks` key.
+    assert "blocks" not in payload
+    attachment = payload["attachments"][0]
+    assert attachment["color"] == "#dc2626"
+    assert attachment["blocks"]
+    assert attachment["blocks"][0]["type"] == "header"
 
 
 def test_slack_notifier_retries_on_5xx_then_succeeds():
@@ -131,3 +136,49 @@ def test_deduplicator_keys_are_independent():
     dedup = Deduplicator(ttl_s=60)
     assert dedup.should_send("a") is True
     assert dedup.should_send("b") is True
+
+
+# --- audit-fix coverage: backoff, client ownership -------------------------
+
+import astk.alerts as _alerts_mod  # noqa: E402
+
+
+class _ClosableClient(_FakeClient):
+    def __init__(self, responses):
+        super().__init__(responses)
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+def test_slack_notifier_no_wasted_sleep_after_final_attempt(monkeypatch):
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
+    client = _FakeClient([500, 500, 500])
+    notifier = SlackNotifier(
+        "https://hooks.slack.com/x", client=client, backoff_base=0.5, max_retries=3
+    )
+
+    result = notifier.send(Alert(title="t", body="b"))
+
+    assert result.ok is False
+    assert result.attempts == 3
+    # Sleeps only BETWEEN attempts (after 1 and 2), never after the final one.
+    assert len(sleeps) == 2
+
+
+def test_slack_notifier_does_not_close_a_caller_supplied_client():
+    client = _ClosableClient([200])
+    notifier = SlackNotifier("https://hooks.slack.com/x", client=client)
+    assert notifier._owns_client is False
+    notifier.close()
+    assert client.closed is False
+
+
+def test_slack_notifier_context_manager_closes_the_client_it_created(monkeypatch):
+    created = _ClosableClient([200])
+    monkeypatch.setattr(_alerts_mod.httpx, "Client", lambda **kwargs: created)
+    with SlackNotifier("https://hooks.slack.com/x") as notifier:
+        assert notifier._owns_client is True
+    assert created.closed is True
