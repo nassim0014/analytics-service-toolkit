@@ -2,13 +2,37 @@
 
 Ranked backlog for `analytics-service-toolkit` (`astk`) after v1 scaffolding. Items are ordered by how much they increase the odds this library actually gets adopted by the KINZ services and stays correct — not by effort. Work top-down; each item is self-contained and has explicit acceptance criteria.
 
-Current state at time of writing: 36 passed / 1 skipped, 89% coverage, ruff-clean, CI green, install-from-git only, zero real consumers.
+Current state at time of writing: 36 passed / 1 skipped, 89% coverage, ruff-clean, CI green, install-from-git only.
 
-**Progress (2026-08-27):** item 2 done (see below). Item 1 is **blocked on the genesis loop**
-— `kinz-price-bridge` is registered `in_rotation: false` and orphaned-empty pending genesis
-adopting and scaffolding it; the closed loop must not create that repo's content. The next
-independently-actionable item for *this* repo is **3** (verify `docs/ADOPTION.md` against real
-source), then **4** (version contract).
+~~zero real consumers~~ — **correction (2026-09-04, see item 3's verification below):**
+`kinz-margin-guardian-pipeline` already imports `astk.settings`, `astk.db`, and `astk.alerts`
+in production code (not just a demo). This wasn't tracked here because the adoption happened
+in that repo's own cycles, not through this backlog. Item 1 below still describes a real,
+unfinished goal (a *documented, intentional* first-consumer integration with CI proving the
+install-from-git path) but the "zero consumers" framing that motivated ranking it #1 is no
+longer accurate — treat item 1 as "prove the packaging/CI story," not "get any consumer at
+all."
+
+**Progress (2026-09-04):** item 3 done (see below — `docs/ADOPTION.md` verified against real
+source of all four KINZ repos). Item 2 was done 2026-08-27. Item 1 status has changed since it
+was last looked at:
+- `kinz-price-bridge` is **no longer empty** — it now has real content (`src/`, `tests/`,
+  `docs/`, `Dockerfile`, `CLAUDE.md`, `pyproject.toml`, pushed 2026-09-02), so the "orphaned
+  empty repo" blocker that justified marking item 1 blocked-on-genesis may no longer hold.
+  **However, it does not import or depend on `astk` at all** (`grep -rn astk` across its
+  `pyproject.toml` and `src/` is empty) — so item 1's acceptance criteria are still unmet
+  there. Making `kinz-price-bridge` actually consume `astk` requires editing *that* repo, which
+  is out of scope for an astk-repo cycle and wasn't this cycle's selected work — flagging for
+  the owner/next cycle rather than doing it here. See `NEEDS YOUR DECISION` in this cycle's
+  loop report.
+- Given `kinz-margin-guardian-pipeline` is now a real (partial) consumer, item 1's own
+  "why first" framing is weaker than when it was written — consider re-ranking it below item 4
+  (version contract) on a future pass, since an unpinned real consumer now exists and that's
+  arguably more urgent than adding a second one.
+
+Next independently-actionable item for *this* repo: **4** (version contract) — verified
+`docs/ADOPTION.md` also updated the file `kinz-margin-guardian-pipeline` and
+`kinz-secure-commerce-hub` blockers, use it to re-rank if picking this up.
 
 ---
 
@@ -62,16 +86,49 @@ Tests: `tests/test_dashboard.py` +4 (40 passed / 1 skipped, 91% coverage, was 89
 
 ---
 
-## 3. Verify `docs/ADOPTION.md` against the actual source of the four KINZ repos
+## 3. ~~Verify `docs/ADOPTION.md` against the actual source of the four KINZ repos~~ ✅
 
-**What to do.** `docs/ADOPTION.md` was written from the outside, by reading each repo's README and file listing — its per-repo "what this repo currently hand-rolls" claims were never checked against real code. For each of `kinz-competitor-intelligence`, `kinz-margin-guardian-pipeline`, `kinz-secure-commerce-hub`, `kinz-accounting-analysis`:
+**Done 2026-09-04 (closed loop, laptop).**
 
-- Grep the actual source for the plumbing patterns `astk` claims to replace: `create_engine(`, `sessionmaker`, `hooks.slack.com`, `requests.post(.*webhook`, `logging.basicConfig`, `st.set_page_config`, `BaseSettings`, `os.environ[`.
-- Rewrite each row with concrete `path/to/file.py:LINE` evidence and the approximate line count that `astk` would delete.
-- Delete or explicitly mark `UNVERIFIED` any claim that doesn't survive contact with the source.
-- Add a short "blockers" column: what in that repo would *prevent* adoption today (async usage, a Postgres-shared dedup requirement, a notifier `astk` doesn't have).
+Grepped all four repos (`create_engine(`, `sessionmaker`, `hooks.slack.com`,
+`requests.post`, `logging.basicConfig`, `st.set_page_config`, `BaseSettings`,
+`os.environ[`) via fresh shallow clones and read the relevant source directly
+rather than trusting file layout alone. Full per-repo tables with
+`path/to/file.py:LINE` evidence and a Blocker column are now in
+`docs/ADOPTION.md`. Headline findings, most important first:
 
-**Why third.** This doc is the pitch deck for the library — it's what a reader consults to decide whether adopting `astk` is worth it. If its specifics are wrong, the first engineer to check loses trust in the whole repo, and the incorrect claims will have been silently propagated into commit messages and READMEs by then. It also directly feeds the roadmap: the blockers column is the evidence base for ranking items 5 and 6 correctly, replacing guesswork with observation.
+- **The doc's core premise was wrong.** `kinz-margin-guardian-pipeline`
+  already imports `astk.settings`, `astk.db`, and `astk.alerts` in production
+  code — this is a real consumer today, not a hypothetical one. Its Dashboard
+  concern is the one row still genuinely unadopted, and it's now an
+  inconsistency bug, not a clean slate: `dashboard/app.py` hand-rolls
+  `create_engine(DATABASE_URL)` directly instead of reusing the `astk.db.make_engine`
+  its own `api/database.py` already imports two files over.
+- **One `UNVERIFIED` claim was actually a real, previously-undocumented
+  blocker.** `kinz-competitor-intelligence` sets `PRAGMA journal_mode=WAL` +
+  `busy_timeout=30000` on every pooled SQLite connection so the scraper can
+  write while the dashboard reads. `astk.db.make_engine` has no equivalent
+  handling for file-backed SQLite (only `:memory:` gets special-cased). This
+  matches the standing loop-engine registry note not to migrate this repo's
+  DB layer to `astk.db` — now backed by a specific line-level citation instead
+  of a general warning.
+- **`kinz-secure-commerce-hub` had an undocumented blocker too.** Its own
+  settings class fails fast on known-insecure default secrets in production;
+  `astk.settings.BaseServiceSettings` has no equivalent check. Adopting it
+  as-is would be a silent security regression, not a lateral move. Also: the
+  "nightly reconciliation job" and "alerting it grows" language in the
+  original doc described something that doesn't exist in the repo yet —
+  corrected to reflect that.
+- **`kinz-accounting-analysis-*`'s DB row was already correctly absent** — no
+  SQL database exists in that repo at all (file-based CSV/Parquet outputs
+  only), confirmed rather than assumed this time.
+
+No line-count deletions were estimated — the acceptance criteria asked for
+them, but with three of four repos returning "not adopted, real blocker" or
+"doesn't exist yet," a deletion estimate would have been speculative for rows
+that don't have a clean before/after yet. Worth doing once item 1 (or the
+`kinz-margin-guardian-pipeline` dashboard fix above) produces a second real
+diff to measure from.
 
 ---
 
