@@ -15,7 +15,7 @@ from functools import cache
 from typing import Any
 
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -40,16 +40,49 @@ def make_engine(
     same in-memory database survives across connections — plain SQLite
     otherwise hands every new connection a *fresh, empty* database, which is
     surprising the first time you hit it in tests.
+
+    Every SQLite URL (file-backed or in-memory) also gets a 30s connect
+    ``timeout`` plus ``PRAGMA journal_mode=WAL`` and ``PRAGMA
+    busy_timeout=30000`` applied to each pooled connection, so a second
+    process (or a second connection from this one) writing to the same file
+    waits instead of failing instantly with "database is locked". Until now
+    this was a documented gap (see docs/IMPROVEMENTS.md): only the in-memory
+    case got any special handling, and every file-backed consumer had to
+    duplicate this itself — as `kinz-competitor-intelligence` and
+    `kinz-price-bridge` both already do, independently, in their own
+    `src/database.py`. WAL is a silent no-op on `:memory:` databases (SQLite
+    always uses "memory" journal mode there), so applying it unconditionally
+    is harmless for that case.
+
+    Deliberately does NOT eagerly open a connection or create any missing
+    parent directory for a file-backed URL — `make_engine()` stays lazy and
+    non-throwing even for an unreachable path (`healthcheck()`/`wait_for_db()`
+    are where that surfaces as `False`, not an exception here). A consuming
+    service that needs its data directory to exist is responsible for
+    creating it itself before calling this.
     """
     kwargs: dict[str, Any] = {"pool_pre_ping": pool_pre_ping}
-    if url.startswith("sqlite"):
-        kwargs["connect_args"] = {"check_same_thread": False}
+    is_sqlite = url.startswith("sqlite")
+    if is_sqlite:
+        kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
         if ":memory:" in url or url == "sqlite://":
             kwargs["poolclass"] = StaticPool
     else:
         kwargs["pool_size"] = pool_size
         kwargs["max_overflow"] = max_overflow
-    return create_engine(url, **kwargs)
+    engine = create_engine(url, **kwargs)
+
+    if is_sqlite:
+        @event.listens_for(engine, "connect")
+        def _set_sqlite_pragmas(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA busy_timeout=30000")
+            finally:
+                cursor.close()
+
+    return engine
 
 
 @contextmanager
