@@ -112,6 +112,14 @@ rather than trusting file layout alone. Full per-repo tables with
   matches the standing loop-engine registry note not to migrate this repo's
   DB layer to `astk.db` — now backed by a specific line-level citation instead
   of a general warning.
+  **Resolved:** `make_engine()` now applies the same `journal_mode=WAL` +
+  `busy_timeout=30000` to every SQLite connection it opens (file-backed or
+  `:memory:`, via a `connect`-event listener — see `src/astk/db.py`,
+  `tests/test_db.py`), so this is no longer a reason to keep
+  `kinz-competitor-intelligence`'s engine off `astk.db`. It deliberately still
+  does not create a missing parent directory or eagerly open a connection —
+  `make_engine()` stays lazy and non-throwing even for an unreachable path;
+  that's each consuming service's own responsibility, same as before.
 - **`kinz-secure-commerce-hub` had an undocumented blocker too.** Its own
   settings class fails fast on known-insecure default secrets in production;
   `astk.settings.BaseServiceSettings` has no equivalent check. Adopting it
