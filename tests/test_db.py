@@ -121,3 +121,44 @@ def test_healthcheck_times_out_promptly_on_a_slow_engine():
 
 def test_healthcheck_zero_timeout_runs_inline(sqlite_engine):
     assert healthcheck(sqlite_engine, timeout_s=0) is True
+
+
+# --- WAL mode + busy_timeout for SQLite (closes the docs/IMPROVEMENTS.md gap) -
+
+def test_make_engine_file_sqlite_enables_wal_and_busy_timeout(tmp_path):
+    """A file-backed SQLite engine must come back with WAL journaling and a
+    30s busy timeout on every connection, matching the handling
+    kinz-competitor-intelligence and kinz-price-bridge each duplicate today."""
+    make_engine.cache_clear()
+    db_path = tmp_path / "test.db"
+    engine = make_engine(f"sqlite:///{db_path}")
+    try:
+        with engine.connect() as conn:
+            assert conn.execute(text("PRAGMA journal_mode")).scalar() == "wal"
+            assert conn.execute(text("PRAGMA busy_timeout")).scalar() == 30000
+    finally:
+        make_engine.cache_clear()
+
+
+def test_make_engine_in_memory_sqlite_sets_busy_timeout_without_erroring(sqlite_engine):
+    """WAL is meaningless for :memory: databases — SQLite silently keeps
+    "memory" journal mode — but applying the PRAGMA must not raise, and
+    busy_timeout still applies (relevant to threaded access via StaticPool)."""
+    with sqlite_engine.connect() as conn:
+        assert conn.execute(text("PRAGMA journal_mode")).scalar() == "memory"
+        assert conn.execute(text("PRAGMA busy_timeout")).scalar() == 30000
+
+
+def test_make_engine_does_not_create_missing_parent_directory():
+    """make_engine() itself must stay lazy and non-throwing for an
+    unreachable path — test_healthcheck_false_for_broken_engine above
+    depends on this not raising here. No mkdir side effect belongs in a
+    shared, cached constructor; that's each consuming service's own job."""
+    import os
+
+    make_engine.cache_clear()
+    bad_dir = "/nonexistent-directory-astk-test"
+    assert not os.path.isdir(bad_dir)
+    make_engine(f"sqlite:////{bad_dir.lstrip('/')}/does-not-exist.db")  # 4 slashes = absolute path
+    assert not os.path.isdir(bad_dir)
+    make_engine.cache_clear()
