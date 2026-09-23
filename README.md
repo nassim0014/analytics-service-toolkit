@@ -104,6 +104,14 @@ for the full ranked list:
 - `astk doctor` checks reachability, not schema/migration state.
 - No `pip`-installable release on PyPI — install straight from git for now.
 
+## Compatibility
+
+Pre-1.0 versioning policy: **minor** version bumps (`0.1.x` → `0.2.0`) may
+break the public API; **patch** bumps (`0.1.0` → `0.1.1`) never do. See
+[CHANGELOG.md](CHANGELOG.md) for what changed in each release. Once a
+consumer pins a tag (see the Install section), a `pip install -U` will never
+silently change behaviour underneath it — only an explicit re-pin can.
+
 ## Development
 
 ```bash
