@@ -2,7 +2,7 @@
 
 Ranked backlog for `analytics-service-toolkit` (`astk`) after v1 scaffolding. Items are ordered by how much they increase the odds this library actually gets adopted by the KINZ services and stays correct — not by effort. Work top-down; each item is self-contained and has explicit acceptance criteria.
 
-Current state at time of writing: 36 passed / 1 skipped, 89% coverage, ruff-clean, CI green, install-from-git only.
+Current state at time of writing: 60 passed / 1 skipped, 91% coverage, ruff-clean, CI green, install-from-git only (updated 2026-09-23; the "36 passed" figure predated items 2, 3 and 4a landing).
 
 ~~zero real consumers~~ — **correction (2026-09-04, see item 3's verification below):**
 `kinz-margin-guardian-pipeline` already imports `astk.settings`, `astk.db`, and `astk.alerts`
@@ -30,9 +30,12 @@ was last looked at:
   (version contract) on a future pass, since an unpinned real consumer now exists and that's
   arguably more urgent than adding a second one.
 
-Next independently-actionable item for *this* repo: **4** (version contract) — verified
-`docs/ADOPTION.md` also updated the file `kinz-margin-guardian-pipeline` and
-`kinz-secure-commerce-hub` blockers, use it to re-rank if picking this up.
+**Update 2026-09-23:** item 4's code/docs half is done (now 4a, below). The
+only thing left under "4" is 4b — tagging `v0.1.0` and cutting the release —
+which is a publish action for the owner, not something this loop takes on
+its own authority. Next independently-actionable item for *this* repo is
+therefore **5** (Postgres-backed `Deduplicator`), unless the owner does 4b
+first and wants the README pin as a follow-up.
 
 ---
 
@@ -140,17 +143,68 @@ diff to measure from.
 
 ---
 
-## 4. Establish a version contract: `v0.1.0` tag + `CHANGELOG.md` + pinned-install docs
+## 4a. Version-contract groundwork: `CHANGELOG.md` + metadata-driven `__version__` + Compatibility docs ✅
 
-**What to do.**
+**Done 2026-09-23 (closed loop, laptop).**
 
-- Add `CHANGELOG.md` in Keep a Changelog format with an `Unreleased` section and a `0.1.0` entry covering the initial module set. This was never scaffolded despite the README's dev section implying process around it, and sibling repos (`btc-llm-sentiment`, `kinz-secure-commerce-hub`) already carry one.
-- Tag `v0.1.0` and cut a GitHub release pointing at the changelog entry.
-- Make `astk.__version__` the single source of truth, read from package metadata (`importlib.metadata.version("astk")`), have `astk version` print it, and add a test asserting it matches the `pyproject.toml` version.
-- Update the README install section from a bare git URL to a pinned form: `pip install "astk @ git+ssh://git@github.com/nassim0014/analytics-service-toolkit.git@v0.1.0"`, with a note that consumers must pin a tag, never a branch.
-- Add a short "Compatibility" section stating the pre-1.0 policy: minor bumps may break, patch bumps never do.
+Split out of the original item 4 (now 4b, below) — cutting a tag and a
+GitHub release on a public repo is a publish action outside what an
+unattended loop cycle takes on its own judgement; the file/code changes are
+not, so they landed here instead of being blocked on the whole item.
 
-**Why fourth.** Four services depending on an unpinned default branch is a supply chain where any commit to `main` can break production in repos nobody was thinking about. Pinning is the precondition for item 1's CI to be meaningful and for anyone to adopt the library without fear. It's ranked below the correctness items because a version contract around broken caching just pins the bug, but above all feature work — no new module should ship before there's a way to release it safely.
+- Added `CHANGELOG.md` in Keep a Changelog format: `Unreleased` section plus
+  a `0.1.0` entry listing the initial module set (settings, db, alerts,
+  dashboard, logging, CLI) and the two correctness fixes items 2 and 3 already
+  landed, including the `cached_query()` breaking-change note item 2 asked to
+  fold in here.
+- `astk.__version__` now reads from
+  `importlib.metadata.version("analytics-service-toolkit")` — the pip
+  distribution name, not the `astk` import name; the two differ, and getting
+  this wrong (verified by deliberately reintroducing it, see below) silently
+  falls back to the hardcoded literal with no visible error — instead of a
+  hardcoded string literal, falling back to the `pyproject.toml` literal only
+  when metadata isn't available (editable/uninstalled case,
+  `PackageNotFoundError`). `astk version` (the CLI command) was already wired
+  to print `__version__` — unchanged, now correct by construction instead of
+  two numbers kept in sync by hand.
+- `tests/test_version.py`: one test asserts `astk.__version__` equals
+  `pyproject.toml`'s version; a second monkeypatches
+  `importlib.metadata.version` and reloads the module to pin the *exact*
+  distribution name queried and prove the value actually flows from
+  metadata, not a coincidentally-equal fallback (the first test alone can't
+  tell those apart, since both are currently `"0.1.0"` — confirmed by
+  reintroducing the wrong-name bug and watching only the second test fail);
+  a third exercises `astk version` end-to-end via the CLI runner.
+- Added a "Compatibility" section to `README.md` stating the pre-1.0 policy:
+  minor bumps may break, patch bumps never do.
+
+Tests: `tests/test_version.py` +3 (60 passed / 1 skipped, was 57 passed / 1
+skipped — coverage unaffected, the new tests are metadata-only, no new source
+lines to cover). The backlog's "current state" line at the top of this file
+(36 passed) had already gone stale from items 2/3 landing since it was
+written; corrected there too rather than compounding it further.
+
+## 4b. Tag `v0.1.0`, cut the GitHub release, and pin the README install line
+
+**What to do.** Now that 4a exists, this is the remaining, purely-owner action:
+
+- Tag `v0.1.0` at the commit that merges 4a and cut a GitHub release pointing
+  at the `CHANGELOG.md` `0.1.0` entry.
+- Update the README install section from the current bare git URL to a pinned
+  form: `pip install "astk @ git+https://github.com/nassim0014/analytics-service-toolkit.git@v0.1.0"`,
+  with a note that consumers must pin a tag, never a branch. (Left undone in
+  4a deliberately — documenting a tag that doesn't exist yet would be
+  misleading; do this in the same commit as the tag.)
+
+**Why left for the owner.** Cutting a release makes a new artifact visible on
+a public repo's Releases tab — that's a publish action, not a code change,
+and outside what this loop takes on its own authority.
+
+**Why fourth (original ranking, still applies to 4b).** Four services
+depending on an unpinned default branch is a supply chain where any commit to
+`main` can break production in repos nobody was thinking about. Pinning is
+the precondition for item 1's CI to be meaningful and for anyone to adopt the
+library without fear.
 
 ---
 
