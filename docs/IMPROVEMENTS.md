@@ -193,6 +193,20 @@ diff to measure from.
 
 ---
 
+## 8. `SlackNotifier`'s HTTP-retry-on-exception path has no test   `source: coverage`
+
+`src/astk/alerts.py` is 91% covered; the missing lines are 138-141 — the `except httpx.HTTPError as exc: last_error = ...; self._sleep_if_retrying(attempt); continue` branch inside `SlackNotifier.send()`. Only non-2xx status-code retries are exercised by the test suite; a transport-level exception (connection refused, DNS failure, timeout) has never been tested. This is the code path underpinning CLAUDE.md's stated guarantee that "a broken alert channel must not take down the service using it" — the one contract this module exists to keep. Smaller secondary gaps in the same file: lines 50, 61-62, 64 (`ConsoleNotifier` field printing and `_build_payload`'s `fields`/`link` branches).
+
+Loop-Agent: backlog-refresh / claude / laptop
+
+## 9. `cli.py`: `doctor`'s Slack-config-error path and `query`'s csv/json output are untested   `source: coverage`
+
+`src/astk/cli.py` is 80% covered, the lowest of the actively-used modules. Lines 39-40 — `doctor`'s `except ValueError as exc:` branch when `SlackNotifier(...)` construction fails (e.g. a malformed webhook URL) — and lines 80-87 — the `query` command's `--format json` / `--format csv` branches — have no test coverage. `doctor` is described in the module docstring as "the flagship command," so its failure-reporting path being untested is a real gap in the CLI users run first.
+
+Loop-Agent: backlog-refresh / claude / laptop
+
+---
+
 ## Landed 2026-09-02 (toolkit self-audit)
 
 Found while auditing astk from the outside (`ASTK_TOOLKIT_AUDIT.md` in the
