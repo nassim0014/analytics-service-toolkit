@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "analytics-service-toolkit"
 version = "0.1.0"
-description = "Shared settings/DB/alerting/dashboard-chrome toolkit for Python data services. No business logic — import only."
+description = "Shared settings/DB/alerting/dashboard-chrome toolkit for Python data services. No business logic - import only."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"

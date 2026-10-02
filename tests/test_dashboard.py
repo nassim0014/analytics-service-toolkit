@@ -51,10 +51,10 @@ def test_demo_app_smoke():
 
 # --- cached_query --------------------------------------------------------------
 #
-# Item 2 in docs/IMPROVEMENTS.md suspected `cached_query` never hit its cache
+# suspected `cached_query` never hit its cache
 # across Streamlit reruns (a fresh closure per call). That turns out to be false
-# — st.cache_data keys on the wrapped function's module+qualname+source, which
-# are stable — but the old code captured `engine` in that closure, *outside* the
+# - st.cache_data keys on the wrapped function's module+qualname+source, which
+# are stable - but the old code captured `engine` in that closure, *outside* the
 # cache key, so a second engine (or, once supported, different bind params)
 # silently reused the first call's rows. These tests pin both facts.
 
@@ -112,7 +112,7 @@ def test_cached_query_does_not_serve_one_engines_rows_to_another(counting_fetch_
     cached_query(engine_a, "SELECT 1")
     cached_query(engine_b, "SELECT 1")
 
-    # Pre-fix, engine was captured outside the cache key, so this was 1 —
+    # Pre-fix, engine was captured outside the cache key, so this was 1 -
     # engine_b silently got engine_a's result.
     assert len(counting_fetch_df) == 2
     assert {row[0] for row in counting_fetch_df} == {

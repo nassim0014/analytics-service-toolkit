@@ -101,7 +101,7 @@ import time as _time  # noqa: E402
 
 
 class _SlowEngine:
-    """Engine whose connect() blocks — models a hung TCP connect to a dead DB."""
+    """Engine whose connect() blocks - models a hung TCP connect to a dead DB."""
 
     def __init__(self, delay_s: float) -> None:
         self.delay_s = delay_s
@@ -123,7 +123,7 @@ def test_healthcheck_zero_timeout_runs_inline(sqlite_engine):
     assert healthcheck(sqlite_engine, timeout_s=0) is True
 
 
-# --- WAL mode + busy_timeout for SQLite (closes the docs/IMPROVEMENTS.md gap) -
+# --- WAL mode + busy_timeout for SQLite ---
 
 def test_make_engine_file_sqlite_enables_wal_and_busy_timeout(tmp_path):
     """A file-backed SQLite engine must come back with WAL journaling and a
@@ -141,8 +141,8 @@ def test_make_engine_file_sqlite_enables_wal_and_busy_timeout(tmp_path):
 
 
 def test_make_engine_in_memory_sqlite_sets_busy_timeout_without_erroring(sqlite_engine):
-    """WAL is meaningless for :memory: databases — SQLite silently keeps
-    "memory" journal mode — but applying the PRAGMA must not raise, and
+    """WAL is meaningless for :memory: databases - SQLite silently keeps
+    "memory" journal mode - but applying the PRAGMA must not raise, and
     busy_timeout still applies (relevant to threaded access via StaticPool)."""
     with sqlite_engine.connect() as conn:
         assert conn.execute(text("PRAGMA journal_mode")).scalar() == "memory"
@@ -151,7 +151,7 @@ def test_make_engine_in_memory_sqlite_sets_busy_timeout_without_erroring(sqlite_
 
 def test_make_engine_does_not_create_missing_parent_directory():
     """make_engine() itself must stay lazy and non-throwing for an
-    unreachable path — test_healthcheck_false_for_broken_engine above
+    unreachable path - test_healthcheck_false_for_broken_engine above
     depends on this not raising here. No mkdir side effect belongs in a
     shared, cached constructor; that's each consuming service's own job."""
     import os

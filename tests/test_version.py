@@ -14,7 +14,7 @@ def test_version_matches_pyproject_toml():
 
 def test_version_is_read_from_metadata_under_the_pip_distribution_name(monkeypatch):
     # The importable package is `astk` but the pip/PyPI distribution name is
-    # "analytics-service-toolkit" (pyproject.toml [project].name) — those two
+    # "analytics-service-toolkit" (pyproject.toml [project].name) - those two
     # numbers happen to be equal ("0.1.0") right now, so a plain equality
     # check against pyproject.toml can't tell "read from metadata" apart from
     # "silently fell back to the hardcoded literal". Pin the actual lookup
@@ -32,7 +32,7 @@ def test_version_is_read_from_metadata_under_the_pip_distribution_name(monkeypat
         assert calls == ["analytics-service-toolkit"]
         assert astk.__version__ == "9.9.9-test-sentinel"
     finally:
-        # Undo the patch BEFORE reloading — pytest's own monkeypatch teardown
+        # Undo the patch BEFORE reloading - pytest's own monkeypatch teardown
         # runs after this function returns, so reloading here while the
         # patch is still live would leave __version__ stuck on the sentinel
         # for every later test instead of restoring the real metadata value.

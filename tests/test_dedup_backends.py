@@ -1,11 +1,11 @@
-"""Tests for the pluggable `DedupBackend` protocol (item 5 in
-docs/IMPROVEMENTS.md): `InMemoryDedupBackend` (the existing behaviour,
-extracted), `PostgresDedupBackend` (new — SQL-building path only, no real
+"""Tests for the pluggable `DedupBackend` protocol:
+`InMemoryDedupBackend` (the existing behaviour,
+extracted), `PostgresDedupBackend` (new - SQL-building path only, no real
 Postgres required), and `create_dedup_table`.
 
 The real-Postgres concurrency test (two workers racing on the same key must
 produce exactly one winner) is `@pytest.mark.postgres`, skipped unless
-`ASTK_TEST_POSTGRES_URL` is set — there is no Postgres instance in this
+`ASTK_TEST_POSTGRES_URL` is set - there is no Postgres instance in this
 environment, so it has never actually run here. Everything else is verified
 against fakes/sqlite and does run.
 """
@@ -132,7 +132,7 @@ def test_postgres_backend_claim_loses_when_no_row_comes_back():
 
 
 def test_postgres_backend_claim_is_a_single_atomic_upsert_not_read_then_write():
-    # Exactly one statement, an INSERT .. ON CONFLICT .. RETURNING — not a
+    # Exactly one statement, an INSERT .. ON CONFLICT .. RETURNING - not a
     # SELECT followed by an INSERT/UPDATE, which would race between two
     # workers the way the `claim` contract exists to prevent.
     engine = _FakeEngine(rows=[("k",)])

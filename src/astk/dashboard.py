@@ -1,5 +1,5 @@
 """Streamlit dashboard chrome: KPI rows, health gauges, timeseries charts,
-editable tables, sidebar filters — the pieces every service's dashboard
+editable tables, sidebar filters - the pieces every service's dashboard
 rebuilds from scratch.
 
 Streamlit is an optional dependency (`pip install analytics-service-toolkit[streamlit]`).
@@ -111,7 +111,7 @@ def sidebar_filters(options: dict[str, list]) -> dict:
 
 #: Default cache lifetime for :func:`cached_query`. Fixed at module scope
 #: because ``st.cache_data`` only accepts ``ttl`` at decoration time, not per
-#: call — see the note in :func:`cached_query`.
+#: call - see the note in :func:`cached_query`.
 CACHED_QUERY_TTL_S = 60
 
 
@@ -135,7 +135,7 @@ else:  # pragma: no cover - exercised via the astk[streamlit] extra
 def cached_query(engine, sql: str, params: dict[str, object] | None = None):
     """`fetch_df`, wrapped in `st.cache_data` so repeated reruns don't re-hit Postgres.
 
-    The cache is keyed on ``(str(engine.url), sql, params)`` — all hashable — so
+    The cache is keyed on ``(str(engine.url), sql, params)`` - all hashable - so
     two dashboards pointed at different databases, or the same SQL run with
     different bind parameters, never collide on a stale cached result. The engine
     object is passed straight through (Streamlit ignores the leading-underscore
@@ -143,7 +143,7 @@ def cached_query(engine, sql: str, params: dict[str, object] | None = None):
 
     ``ttl`` is fixed at :data:`CACHED_QUERY_TTL_S`: ``st.cache_data`` bakes ``ttl``
     in at decoration time, so it cannot be a per-call argument without recreating
-    the cache wrapper on every call — which is exactly the bug this function used
+    the cache wrapper on every call - which is exactly the bug this function used
     to have (a fresh closure per invocation, with ``engine`` captured *outside*
     the cache key, so a second engine silently reused the first engine's rows).
     """

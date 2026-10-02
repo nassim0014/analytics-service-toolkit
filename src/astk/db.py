@@ -34,10 +34,10 @@ def make_engine(
     Cached via ``functools.cache`` on the full argument tuple (``url`` plus the
     keyword pool options), so the common ``make_engine(url)`` call returns one
     shared engine per URL, while a call with different pool settings gets its
-    own. The cache is process-lifetime — fine for a long-running service.
+    own. The cache is process-lifetime - fine for a long-running service.
 
     SQLite in-memory URLs get `StaticPool` + `check_same_thread=False` so the
-    same in-memory database survives across connections — plain SQLite
+    same in-memory database survives across connections - plain SQLite
     otherwise hands every new connection a *fresh, empty* database, which is
     surprising the first time you hit it in tests.
 
@@ -46,16 +46,16 @@ def make_engine(
     busy_timeout=30000`` applied to each pooled connection, so a second
     process (or a second connection from this one) writing to the same file
     waits instead of failing instantly with "database is locked". Until now
-    this was a documented gap (see docs/IMPROVEMENTS.md): only the in-memory
+ this was a documented gap : only the in-memory
     case got any special handling, and every file-backed consumer had to
-    duplicate this itself — as `kinz-competitor-intelligence` and
+    duplicate this itself - as `kinz-competitor-intelligence` and
     `kinz-price-bridge` both already do, independently, in their own
     `src/database.py`. WAL is a silent no-op on `:memory:` databases (SQLite
     always uses "memory" journal mode there), so applying it unconditionally
     is harmless for that case.
 
     Deliberately does NOT eagerly open a connection or create any missing
-    parent directory for a file-backed URL — `make_engine()` stays lazy and
+    parent directory for a file-backed URL - `make_engine()` stays lazy and
     non-throwing even for an unreachable path (`healthcheck()`/`wait_for_db()`
     are where that surfaces as `False`, not an exception here). A consuming
     service that needs its data directory to exist is responsible for
@@ -110,13 +110,13 @@ def healthcheck(engine: Any, timeout_s: float = 5.0) -> bool:
     """Return True if a trivial query succeeds against the engine within ``timeout_s``.
 
     The check runs on a worker thread and is abandoned if it takes longer than
-    ``timeout_s`` seconds — so a hung TCP connect to an unreachable database
+    ``timeout_s`` seconds - so a hung TCP connect to an unreachable database
     returns ``False`` promptly instead of blocking the caller (which is the
     whole point of using this in ``wait_for_db`` at startup). ``timeout_s <= 0``
     disables the bound and runs inline.
 
     Accepts anything with an `engine.connect()` context manager whose
-    connection has `.execute()` — real SQLAlchemy engines and test doubles
+    connection has `.execute()` - real SQLAlchemy engines and test doubles
     both work, which is what lets `wait_for_db` be tested without a real
     database.
     """

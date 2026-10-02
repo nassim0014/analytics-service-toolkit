@@ -97,7 +97,7 @@ def test_slack_notifier_rejects_the_masked_secret_string():
     """Regression proof for the silent-alert-loss trap.
 
     On the OLD code `SlackNotifier("**********")` constructs fine and only fails at
-    send time — returning `AlertResult(ok=False)` and raising nothing, so a service
+    send time - returning `AlertResult(ok=False)` and raising nothing, so a service
     wired per the old README loses every alert silently. The fix rejects the URL at
     construction, where the mistake is still visible.
     """

@@ -16,7 +16,7 @@ from typing import Literal, TypeVar
 from pydantic import PostgresDsn, SecretStr, TypeAdapter, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Reused to validate Postgres URLs while still accepting sqlite:// — see
+# Reused to validate Postgres URLs while still accepting sqlite:// - see
 # BaseServiceSettings.database_url below.
 _POSTGRES_DSN = TypeAdapter(PostgresDsn)
 
@@ -55,7 +55,7 @@ class BaseServiceSettings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # A plain str, not PostgresDsn: these services run Postgres in prod but SQLite
     # in tests (and astk.db.make_engine is SQLite-safe by design). A PostgresDsn
-    # field would reject `sqlite:///…` at load time and force every consumer to
+    # field would reject `sqlite:///...` at load time and force every consumer to
     # override it. The validator below keeps the readable Postgres error for the
     # common case while letting sqlite (and other schemes) through.
     database_url: str | None = None
@@ -105,7 +105,7 @@ class BaseServiceSettings(BaseSettings):
         Exists because ``slack_webhook_url`` is a ``SecretStr``: in pydantic v2
         ``str(secret)`` returns the mask ``"**********"``, not the URL, so the obvious
         ``SlackNotifier(str(settings.slack_webhook_url))`` silently builds a notifier
-        that can never deliver. Call this instead — it unwraps the secret.
+        that can never deliver. Call this instead - it unwraps the secret.
         """
         if self.slack_webhook_url is None:
             return None

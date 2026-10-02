@@ -78,8 +78,8 @@ def _build_payload(alert: Alert) -> dict:
             }
         )
     # Nest the blocks INSIDE the attachment so Slack renders the coloured
-    # severity bar. A top-level `blocks` list with a separate `{"color": …}`
-    # attachment (the previous shape) drew no colour at all — Slack only tints
+    # severity bar. A top-level `blocks` list with a separate `{"color": ...}`
+    # attachment (the previous shape) drew no colour at all - Slack only tints
     # content that lives inside the attachment.
     return {"attachments": [{"color": color, "blocks": blocks}]}
 
@@ -87,7 +87,7 @@ def _build_payload(alert: Alert) -> dict:
 class SlackNotifier:
     """Posts to a Slack incoming webhook. Retries on 429/5xx with exponential
     backoff; on any other failure (bad webhook, network down, retries
-    exhausted) it returns a failed `AlertResult` instead of raising — a
+    exhausted) it returns a failed `AlertResult` instead of raising - a
     broken alert channel must never take down the service that's trying to
     warn about something else.
     """
@@ -156,7 +156,7 @@ class SlackNotifier:
         return AlertResult(ok=False, attempts=self.max_retries, error=last_error)
 
     def _sleep_if_retrying(self, attempt: int) -> None:
-        # No point sleeping after the final attempt — there is no retry after it.
+        # No point sleeping after the final attempt - there is no retry after it.
         if attempt >= self.max_retries:
             return
         if self.backoff_base:
@@ -168,7 +168,7 @@ class DedupBackend(Protocol):
 
     `claim` must be a single atomic operation: if two callers race on the
     same key, exactly one may return `True`. This is what makes a backend
-    safe to share across processes (N Airflow workers, N Gunicorn workers) —
+    safe to share across processes (N Airflow workers, N Gunicorn workers) -
     a read-then-write implementation would let both callers see "not claimed
     yet" and both send. `InMemoryDedupBackend` and `PostgresDedupBackend` are
     the two implementations here; `Deduplicator` itself only knows the
@@ -184,11 +184,10 @@ class DedupBackend(Protocol):
 
 
 class InMemoryDedupBackend:
-    """Per-process suppression state — the only backend that existed before
+    """Per-process suppression state - the only backend that existed before
     `DedupBackend` was extracted. Good enough for a single long-running
     service or a single Airflow worker; N workers each get independent
-    state, which is exactly the gap `PostgresDedupBackend` closes (see
-    docs/IMPROVEMENTS.md item 5).
+    state, which is exactly the gap `PostgresDedupBackend` closes.
     """
 
     def __init__(self) -> None:
@@ -210,7 +209,7 @@ def _validate_identifier(name: str) -> None:
     # The table name is interpolated directly into DDL/DML text below because
     # SQL doesn't support bind parameters for identifiers. It usually comes
     # from a hardcoded default or a service's own config, never end-user
-    # input — but validating it here instead of trusting that is one line and
+    # input - but validating it here instead of trusting that is one line and
     # turns a possible injection into a clear `ValueError` at construction.
     if not _IDENTIFIER_RE.match(name):
         raise ValueError(
@@ -257,7 +256,7 @@ class PostgresDedupBackend:
     against the same database produce exactly one `True`. Requires
     `create_dedup_table(engine)` (or the equivalent DDL in your own
     migrations) to have run first. Postgres-specific (`ON CONFLICT`,
-    `now()`, `RETURNING`) — this is not a generic-SQL backend.
+    `now()`, `RETURNING`) - this is not a generic-SQL backend.
     """
 
     def __init__(self, engine: Engine, table_name: str = "astk_alert_dedup") -> None:
@@ -281,7 +280,7 @@ class PostgresDedupBackend:
 class Deduplicator:
     """Suppresses repeat alerts sharing a key within a TTL window.
 
-    Backed by `InMemoryDedupBackend` by default (per-process only — see its
+    Backed by `InMemoryDedupBackend` by default (per-process only - see its
     docstring). Pass `backend=PostgresDedupBackend(engine)` for suppression
     state shared across multiple processes/workers.
     """

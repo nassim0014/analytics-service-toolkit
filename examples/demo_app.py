@@ -30,7 +30,7 @@ with engine.begin() as conn:
         )
 
 page_header(
-    "astk demo — synthetic margin dashboard",
+    "astk demo - synthetic margin dashboard",
     subtitle="Fictional data. Not a real service.",
     env_badge="dev",
 )

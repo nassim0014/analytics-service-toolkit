@@ -1,7 +1,7 @@
-"""astk — Analytics Service Toolkit.
+"""astk - Analytics Service Toolkit.
 
 Shared settings, database, alerting, dashboard-chrome, and logging helpers for
-the Python data services in this portfolio. See README.md for what this is —
+the Python data services in this portfolio. See README.md for what this is -
 and pointedly what it is not (no business logic, ever).
 """
 
@@ -10,7 +10,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     # The PyPI/pip distribution name is "analytics-service-toolkit" (see
     # pyproject.toml [project].name) even though the importable package is
-    # `astk` — importlib.metadata looks up by distribution name, not import
+    # `astk` - importlib.metadata looks up by distribution name, not import
     # name, so it must match the former.
     __version__ = version("analytics-service-toolkit")
 except PackageNotFoundError:
