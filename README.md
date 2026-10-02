@@ -7,7 +7,7 @@ container started before Postgres was ready" race), Slack alerting with
 retry/backoff, and Streamlit dashboard chrome (KPI rows, health gauges,
 timeseries, editable tables).
 
-It contains **no business logic and no domain data** — no KINZ schema, no
+It contains **no business logic and no domain data** - no KINZ schema, no
 scrapers, no competitor names, no price normalization. It's infrastructure
 only, which is what makes it safe to be public and safe to import from any
 service regardless of what that service does.
@@ -21,41 +21,41 @@ Streamlit dashboard's KPI/gauge/table chrome, and (in margin-guardian's case)
 Slack alerting. Four copies of the same substrate, no shared code, no shared
 tests. This library is that shared layer, extracted once and tested once.
 
-It is deliberately **not** `kinz-price-bridge` — that repo owns the domain
+It is deliberately **not** `kinz-price-bridge` - that repo owns the domain
 logic of turning scraped competitor listings into a normalized price feed.
 This toolkit is what a project like that would be *built on*, not a
 replacement for it.
 
 ## What's here (v1)
 
-- **`astk.settings`** — `BaseServiceSettings` (a pydantic-settings base class
+- **`astk.settings`** - `BaseServiceSettings` (a pydantic-settings base class
   with `app_name`, `env`, `log_level`, `database_url`, `slack_webhook_url`)
   and `load_settings()`, which turns a `pydantic.ValidationError` into a
   readable "missing: X, Y / invalid: Z" message instead of a raw traceback.
   Secrets are redacted in `repr()`. Read the real values back with
-  `settings.dsn()` and `settings.slack_webhook()` — never `str()` on the raw
+  `settings.dsn()` and `settings.slack_webhook()` - never `str()` on the raw
   field, which gives you `"**********"` for the `SecretStr` webhook.
-- **`astk.db`** — `make_engine()` (cached per URL, SQLite-in-memory-safe),
+- **`astk.db`** - `make_engine()` (cached per URL, SQLite-in-memory-safe),
   `session_scope()` (commit/rollback contextmanager), `fetch_df()` (SQL →
   pandas DataFrame), `healthcheck()`, and `wait_for_db()` (polls until the
-  database is reachable — the fix for the Docker Compose startup race).
-- **`astk.alerts`** — `Alert` / `AlertResult` value objects, `SlackNotifier`
-  (retries on 429/5xx with exponential backoff, **never raises** — a broken
+  database is reachable - the fix for the Docker Compose startup race).
+- **`astk.alerts`** - `Alert` / `AlertResult` value objects, `SlackNotifier`
+  (retries on 429/5xx with exponential backoff, **never raises** - a broken
   alert channel must not take down the service using it), `ConsoleNotifier`
   for dev, and `Deduplicator` (suppress a repeated alert key within a TTL so
   a flapping threshold doesn't spam the channel once per DAG run). Dedup
   storage is pluggable via the `DedupBackend` protocol:
   `InMemoryDedupBackend` (the default, per-process) or
   `PostgresDedupBackend` (atomic claim via a single upsert, safe across
-  multiple processes/workers — pair with `create_dedup_table(engine)`).
-- **`astk.dashboard`** — Streamlit chrome: `page_header`, `kpi_row`,
+  multiple processes/workers - pair with `create_dedup_table(engine)`).
+- **`astk.dashboard`** - Streamlit chrome: `page_header`, `kpi_row`,
   `health_gauge`, `timeseries`, `data_table`, `sidebar_filters`,
   `cached_query`. The formatting/threshold logic (`format_value`,
   `threshold_color`) is factored into plain functions so it's unit-testable
   without a Streamlit runtime. Streamlit is an optional dependency.
-- **`astk.logging`** — `configure_logging()`: one call, JSON log lines
+- **`astk.logging`** - `configure_logging()`: one call, JSON log lines
   tagged with the service name and a per-run id.
-- **`astk` CLI** (Typer) — `astk doctor` checks DB connectivity and Slack
+- **`astk` CLI** (Typer) - `astk doctor` checks DB connectivity and Slack
   webhook reachability in one shot; `astk alert`, `astk query`, `astk
   version`.
 
@@ -97,18 +97,17 @@ streamlit run examples/demo_app.py   # a working end-to-end demo against fake, s
 
 ## What's not built yet
 
-Being honest about v1's edges — see [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md)
-for the full ranked list:
+Being honest about v1's edges:
 
 - `PostgresDedupBackend` exists and is unit-tested against a fake engine,
   but its live-concurrency test (`@pytest.mark.postgres`) has never run
-  against a real Postgres instance — CI doesn't have a Postgres service
-  container wired up yet (see docs/IMPROVEMENTS.md item 5b).
-- No async support (`asyncpg`/`AsyncSession`) — every KINZ service so far is
+  against a real Postgres instance - CI doesn't have a Postgres service
+ container wired up yet.
+- No async support (`asyncpg`/`AsyncSession`) - every KINZ service so far is
   synchronous, so this wasn't built speculatively.
 - No email/PagerDuty notifier, only Slack + console.
 - `astk doctor` checks reachability, not schema/migration state.
-- No `pip`-installable release on PyPI — install straight from git for now.
+- No `pip`-installable release on PyPI - install straight from git for now.
 
 ## Compatibility
 
@@ -116,7 +115,7 @@ Pre-1.0 versioning policy: **minor** version bumps (`0.1.x` → `0.2.0`) may
 break the public API; **patch** bumps (`0.1.0` → `0.1.1`) never do. See
 [CHANGELOG.md](CHANGELOG.md) for what changed in each release. Once a
 consumer pins a tag (see the Install section), a `pip install -U` will never
-silently change behaviour underneath it — only an explicit re-pin can.
+silently change behaviour underneath it - only an explicit re-pin can.
 
 ## Development
 
@@ -128,4 +127,4 @@ pytest --cov=astk --cov-report=term-missing
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

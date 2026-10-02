@@ -29,20 +29,20 @@ Initial module set.
 
 ### Added
 
-- `astk.settings` — `BaseServiceSettings` / `load_settings()`, pydantic-based
+- `astk.settings` - `BaseServiceSettings` / `load_settings()`, pydantic-based
   configuration loading with SQLite and Postgres `database_url` support.
-- `astk.db` — `make_engine()`, `session_scope()`, `fetch_df()`,
+- `astk.db` - `make_engine()`, `session_scope()`, `fetch_df()`,
   `wait_for_db()`, `healthcheck()`. SQLite connections get
   `journal_mode=WAL` + `busy_timeout=30000` applied automatically
   (file-backed and `:memory:`).
-- `astk.alerts` — `SlackNotifier`, `ConsoleNotifier`, `Alert`,
+- `astk.alerts` - `SlackNotifier`, `ConsoleNotifier`, `Alert`,
   `Deduplicator`. Notifiers never raise into the caller; failures come back
   as a failed `AlertResult`.
-- `astk.dashboard` — Streamlit chrome (`page_header`, `kpi_row`,
+- `astk.dashboard` - Streamlit chrome (`page_header`, `kpi_row`,
   `timeseries`, `cached_query`). `cached_query(engine, sql, params=None)` is
   correctly keyed per-engine and supports parameterised queries (this shape
-  landed after the initial cut — see "Fixed" below).
-- `astk.logging` — `configure_logging()`.
+  landed after the initial cut - see "Fixed" below).
+- `astk.logging` - `configure_logging()`.
 - `astk` CLI (`astk doctor`, `astk alert`, `astk query`, `astk version`).
 
 ### Fixed
@@ -52,10 +52,10 @@ Initial module set.
   by moving the query onto a module-level cached function keyed on
   `(str(engine.url), sql, sorted(params))`. **Breaking:** the third
   positional argument changed from `ttl_s: int` to `params: dict | None`
-  (acceptable pre-1.0 — the repo had zero consumers of this function at the
+  (acceptable pre-1.0 - the repo had zero consumers of this function at the
   time).
 - `settings.database_url` was `PostgresDsn`-only and rejected the
-  `sqlite:///…` URLs every service actually uses in tests. Now a validated
+  `sqlite:///...` URLs every service actually uses in tests. Now a validated
   `str`.
 - Slack severity colour didn't render (`blocks` were nested outside the
   coloured attachment).

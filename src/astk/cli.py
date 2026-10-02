@@ -2,7 +2,7 @@
 
 The flagship command is `astk doctor`: point it at a service's env vars and
 it tells you, in one shot, whether the database and Slack webhook it depends
-on are actually reachable — instead of finding out when the Airflow DAG
+on are actually reachable - instead of finding out when the Airflow DAG
 fails at 3am.
 """
 
@@ -14,7 +14,7 @@ from . import __version__
 from .alerts import Alert, ConsoleNotifier, SlackNotifier
 from .db import fetch_df, healthcheck, make_engine
 
-app = typer.Typer(help="astk — shared operational toolkit for this portfolio's Python services.")
+app = typer.Typer(help="astk - shared operational toolkit for this portfolio's Python services.")
 
 
 @app.command()
