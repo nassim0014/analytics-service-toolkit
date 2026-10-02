@@ -47,3 +47,6 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "postgres: requires a real Postgres instance via ASTK_TEST_POSTGRES_URL (skipped otherwise)",
+]
