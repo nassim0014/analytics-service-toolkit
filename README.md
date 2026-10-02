@@ -43,7 +43,11 @@ replacement for it.
   (retries on 429/5xx with exponential backoff, **never raises** — a broken
   alert channel must not take down the service using it), `ConsoleNotifier`
   for dev, and `Deduplicator` (suppress a repeated alert key within a TTL so
-  a flapping threshold doesn't spam the channel once per DAG run).
+  a flapping threshold doesn't spam the channel once per DAG run). Dedup
+  storage is pluggable via the `DedupBackend` protocol:
+  `InMemoryDedupBackend` (the default, per-process) or
+  `PostgresDedupBackend` (atomic claim via a single upsert, safe across
+  multiple processes/workers — pair with `create_dedup_table(engine)`).
 - **`astk.dashboard`** — Streamlit chrome: `page_header`, `kpi_row`,
   `health_gauge`, `timeseries`, `data_table`, `sidebar_filters`,
   `cached_query`. The formatting/threshold logic (`format_value`,
@@ -96,8 +100,10 @@ streamlit run examples/demo_app.py   # a working end-to-end demo against fake, s
 Being honest about v1's edges — see [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md)
 for the full ranked list:
 
-- `Deduplicator` is in-memory/per-process only. A Postgres-backed variant
-  for multi-process dedup (e.g. several Airflow workers) doesn't exist yet.
+- `PostgresDedupBackend` exists and is unit-tested against a fake engine,
+  but its live-concurrency test (`@pytest.mark.postgres`) has never run
+  against a real Postgres instance — CI doesn't have a Postgres service
+  container wired up yet (see docs/IMPROVEMENTS.md item 5b).
 - No async support (`asyncpg`/`AsyncSession`) — every KINZ service so far is
   synchronous, so this wasn't built speculatively.
 - No email/PagerDuty notifier, only Slack + console.

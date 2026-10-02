@@ -16,6 +16,12 @@ Pre-1.0: minor version bumps may break the API; patch bumps never do. See the
   hardcoded string literal, so it can't drift from `pyproject.toml`.
 - "Compatibility" section in `README.md` documenting the pre-1.0 versioning
   policy.
+- `astk.alerts.DedupBackend` protocol, `InMemoryDedupBackend` (the previous
+  `Deduplicator` behaviour, extracted), `PostgresDedupBackend` (atomic
+  claim via a single `INSERT ... ON CONFLICT ... RETURNING` upsert, so
+  suppression state can be shared across multiple processes/workers), and
+  `create_dedup_table(engine)`. `Deduplicator(ttl_s=...)` is unchanged and
+  now also accepts `backend=`.
 
 ## [0.1.0] - 2026-08-27
 
