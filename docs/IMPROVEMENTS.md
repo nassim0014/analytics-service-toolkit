@@ -2,7 +2,7 @@
 
 Ranked backlog for `analytics-service-toolkit` (`astk`) after v1 scaffolding. Items are ordered by how much they increase the odds this library actually gets adopted by the KINZ services and stays correct — not by effort. Work top-down; each item is self-contained and has explicit acceptance criteria.
 
-Current state at time of writing: 60 passed / 1 skipped, 91% coverage, ruff-clean, CI green, install-from-git only (updated 2026-09-23; the "36 passed" figure predated items 2, 3 and 4a landing).
+Current state at time of writing: 74 passed / 2 skipped, 92% coverage, ruff-clean, CI green, install-from-git only (updated 2026-10-02 after item 5a landed; the "60 passed / 1 skipped" figure predated it).
 
 ~~zero real consumers~~ — **correction (2026-09-04, see item 3's verification below):**
 `kinz-margin-guardian-pipeline` already imports `astk.settings`, `astk.db`, and `astk.alerts`
@@ -36,6 +36,15 @@ which is a publish action for the owner, not something this loop takes on
 its own authority. Next independently-actionable item for *this* repo is
 therefore **5** (Postgres-backed `Deduplicator`), unless the owner does 4b
 first and wants the README pin as a follow-up.
+
+**Update 2026-10-02:** item 5's library-code half is done (now 5a, below).
+The remaining piece — wiring a real Postgres service container into CI so
+5a's concurrency test actually runs somewhere — is split out as 5b, since it
+edits an existing CI workflow file (a separate, owner-reviewed change under
+this loop's merge rules) and can't be verified from a sandbox with no
+Postgres instance. Next independently-actionable items for *this* repo are
+therefore **6** (`astk doctor` schema checks) or **7** (repo hygiene), unless
+the owner does 4b or 5b first.
 
 ---
 
@@ -208,17 +217,79 @@ library without fear.
 
 ---
 
-## 5. Multi-process `Deduplicator` with a Postgres-backed backend
+## 5a. Multi-process `Deduplicator` with a Postgres-backed backend ✅
 
-**What to do.** The current `Deduplicator` is in-memory and per-process, so N Airflow workers, N Gunicorn workers, or a task retried on a different host each maintain independent suppression state — the exact scenario alert dedup exists to handle.
+**Done 2026-10-02 (cloud-improvements loop).**
 
-- Extract a `DedupBackend` protocol with a single atomic method: `claim(key: str, ttl: timedelta) -> bool`, returning `True` if the caller won the key and should send.
-- Keep the existing in-memory implementation as `InMemoryDedupBackend`, still the default, so nothing breaks.
-- Add `PostgresDedupBackend(engine)` backed by a table `astk_alert_dedup(key text primary key, expires_at timestamptz not null)`. The claim must be a single atomic statement, not read-then-write: `INSERT INTO astk_alert_dedup (key, expires_at) VALUES (:k, :exp) ON CONFLICT (key) DO UPDATE SET expires_at = :exp WHERE astk_alert_dedup.expires_at < now() RETURNING key` — a returned row means the claim was won. Two workers firing simultaneously must produce exactly one alert.
-- Ship a `create_dedup_table(engine)` helper (idempotent `CREATE TABLE IF NOT EXISTS`) plus the raw DDL in the docstring, so consumers can either call it or paste it into their own migrations.
-- Tests: full coverage of the in-memory path and the SQL-building path; a concurrency test against real Postgres marked `@pytest.mark.postgres` and skipped when `ASTK_TEST_POSTGRES_URL` is unset, wired into CI with a Postgres service container.
+Split out of the original item 5 below (now 5b) — the library code (protocol,
+backend, table DDL, tests against fakes/sqlite) is independently shippable
+without touching CI, while wiring a real Postgres service container into
+`.github/workflows/ci.yml` is a separate, CI-file-editing change this cycle's
+merge rules don't allow in the same PR (no existing workflow file may be
+modified) and that can't be verified here anyway — there is no Postgres
+instance in this environment.
 
-**Why fifth.** This is the first *functional* gap that plausibly blocks a real service from adopting the library rather than merely inconveniencing it — a pipeline that runs across workers cannot use the current deduplicator at all and will keep its hand-rolled version, which undercuts the extraction. It ranks below items 1 and 3 because those will tell you which of the four repos actually needs this; build it against a confirmed requirement, not a hypothetical one.
+- `DedupBackend` is now a `Protocol` in `src/astk/alerts.py` with one atomic
+  method, `claim(key: str, ttl: timedelta) -> bool`.
+- `InMemoryDedupBackend` is the existing per-process logic, extracted
+  unchanged in behaviour. `Deduplicator(ttl_s=...)` still works exactly as
+  before (back-compat verified — `tests/test_alerts.py`'s three original
+  Deduplicator tests pass unmodified) and now also takes an optional
+  `backend=` kwarg.
+- `PostgresDedupBackend(engine, table_name="astk_alert_dedup")` issues the
+  single atomic upsert from the original spec
+  (`INSERT ... ON CONFLICT (key) DO UPDATE SET expires_at = :exp WHERE
+  <table>.expires_at < now() RETURNING key`) — a returned row means the
+  claim was won. Table name is validated against a safe-identifier regex
+  before being interpolated into the SQL (identifiers can't be bind
+  parameters).
+- `create_dedup_table(engine, table_name=...)` does the idempotent
+  `CREATE TABLE IF NOT EXISTS`, with the raw DDL also in its docstring for
+  consumers who'd rather paste it into their own migrations.
+- **Tests** (`tests/test_dedup_backends.py`, +15, 2 skipped total including
+  the pre-existing streamlit skip): full behavioural coverage of
+  `InMemoryDedupBackend` and of `Deduplicator`'s delegation to an injected
+  backend; the Postgres SQL-building path is verified against a fake
+  engine/connection (asserts the statement text contains the atomic
+  upsert's `ON CONFLICT`/`RETURNING`/`WHERE ... < now()` clauses and the
+  right bind params, and that it's exactly one `execute()` call, not a
+  select-then-write) rather than against real Postgres, which isn't
+  available here. Verified these tests actually catch a regression: with
+  `src/astk/alerts.py` reverted to the pre-change code, the whole module
+  fails to import (`ImportError: cannot import name 'InMemoryDedupBackend'`)
+  — ruled out these being tests that would pass against anything.
+- A `@pytest.mark.postgres` concurrency test (two threads racing
+  `backend.claim()` on the same key must produce exactly one `True`) is
+  written but skipped unless `ASTK_TEST_POSTGRES_URL` is set — it has never
+  actually run, here or in CI. The `postgres` marker is now registered in
+  `pyproject.toml` so pytest doesn't warn about it.
+
+**Remaining work is 5b below** — wiring a Postgres service container into CI
+so the concurrency test actually runs somewhere, which is an owner call on
+`.github/workflows/ci.yml` (a separate PR, reviewed on its own, per the
+merge rules this loop runs under).
+
+---
+
+## 5b. Wire a real Postgres service container into CI for the dedup concurrency test
+
+**What to do.** `tests/test_dedup_backends.py::test_postgres_backend_two_racing_claims_produce_exactly_one_winner`
+(from 5a) exists but is always skipped — nothing has ever run it, including
+this library's own CI. Add a `postgres` service container to
+`.github/workflows/ci.yml` (or a separate job) and set
+`ASTK_TEST_POSTGRES_URL` so that test executes for real, plus install the
+`postgres` extra (`psycopg2-binary`) in that job so the driver is present.
+
+**Why left for a future cycle, not bundled into 5a.** It's an edit to an
+*existing* CI workflow file, which this loop's merge rules treat as
+high-enough-stakes to require its own reviewed PR rather than riding along
+with a library-code change — and it can't be verified from this sandbox,
+which has no Postgres to test the workflow against before pushing it.
+
+**Why below item 1/3 originally, now below 5a specifically.** Same reasoning
+as the original item 5's ranking: build the CI-wiring cost against a
+confirmed need, and now that 5a exists, this is the one remaining concrete
+piece rather than a hypothetical.
 
 ---
 
