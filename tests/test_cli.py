@@ -1,3 +1,4 @@
+import pandas as pd
 from typer.testing import CliRunner
 
 from astk import cli as cli_module
@@ -54,6 +55,44 @@ def test_alert_command_uses_console_when_no_webhook():
 
     assert result.exit_code == 0
     assert "ok=True" in result.stdout
+
+
+def test_query_command_prints_table_by_default(monkeypatch):
+    monkeypatch.setattr(cli_module, "make_engine", lambda url: object())
+    monkeypatch.setattr(cli_module, "fetch_df", lambda engine, sql: pd.DataFrame({"a": [1, 2]}))
+
+    result = runner.invoke(cli_module.app, ["query", "SELECT 1", "--database-url", "postgresql://x/db"])
+
+    assert result.exit_code == 0
+    assert "a" in result.stdout
+    assert "1" in result.stdout
+    assert "2" in result.stdout
+
+
+def test_query_command_json_format(monkeypatch):
+    monkeypatch.setattr(cli_module, "make_engine", lambda url: object())
+    monkeypatch.setattr(cli_module, "fetch_df", lambda engine, sql: pd.DataFrame({"a": [1, 2]}))
+
+    result = runner.invoke(
+        cli_module.app,
+        ["query", "SELECT 1", "--database-url", "postgresql://x/db", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() == '[{"a":1},{"a":2}]'
+
+
+def test_query_command_csv_format(monkeypatch):
+    monkeypatch.setattr(cli_module, "make_engine", lambda url: object())
+    monkeypatch.setattr(cli_module, "fetch_df", lambda engine, sql: pd.DataFrame({"a": [1, 2]}))
+
+    result = runner.invoke(
+        cli_module.app,
+        ["query", "SELECT 1", "--database-url", "postgresql://x/db", "--format", "csv"],
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout.startswith("a\n1\n2\n")
 
 
 def test_version_command_prints_version():
