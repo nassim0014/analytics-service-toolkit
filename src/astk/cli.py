@@ -13,6 +13,7 @@ import logging
 from pathlib import Path
 
 import typer
+from pydantic import SecretStr
 from sqlalchemy import text
 
 from . import __version__
@@ -101,7 +102,7 @@ class _DemoSettings(BaseServiceSettings):
 
     app_name: str = "astk-demo"
     database_url: str | None = "sqlite:///:memory:"
-    slack_webhook_url: str | None = "https://hooks.slack.com/services/DEMO/NOT-REAL/0000000000"
+    slack_webhook_url: SecretStr | None = SecretStr("https://hooks.slack.com/services/DEMO/NOT-REAL/0000000000")
 
 
 @app.command()
@@ -160,6 +161,12 @@ def demo(
         )
     )
 
+    # .slack_webhook() is the real unwrap path for the SecretStr field - using
+    # dry_run=True here (as `doctor` does) proves it returns a usable URL
+    # without actually posting anywhere.
+    with SlackNotifier(settings.slack_webhook(), dry_run=True) as slack_notifier:
+        slack_check = slack_notifier.send(Alert(title="astk demo", body="webhook unwrap check"))
+
     typer.echo("")
     typer.echo("SETTINGS")
     typer.echo(f"  {settings!r}")
@@ -175,6 +182,7 @@ def demo(
     typer.echo("")
     typer.echo("ALERT")
     typer.echo(f"  ok={result.ok} attempts={result.attempts} error={result.error}")
+    typer.echo(f"  webhook unwrap check (dry-run): ok={slack_check.ok}")
     typer.echo("")
     typer.echo(f"run_id={run_id}")
 
@@ -190,6 +198,7 @@ def demo(
             "database": {"wrote": written, "read": read_back, "healthcheck": is_healthy},
             "dedup": {"first": first_send, "second": second_send},
             "alert": {"ok": result.ok, "attempts": result.attempts, "error": result.error},
+            "slack_webhook_check": {"ok": slack_check.ok},
             "run_id": run_id,
         }
         Path(json_path).write_text(json.dumps(summary, indent=2))

@@ -129,6 +129,19 @@ def test_demo_redacts_the_slack_secret(monkeypatch, tmp_path):
     assert "slack_webhook_url='***'" in result.stdout
     # the real demo webhook string never appears unredacted anywhere in the output
     assert "hooks.slack.com/services/DEMO" not in result.stdout
+    # also shows the real unwrap-for-use path (.slack_webhook()), not just repr masking
+    assert "webhook unwrap check (dry-run): ok=True" in result.stdout
+
+
+def test_demo_slack_field_is_a_real_secretstr(monkeypatch):
+    # _DemoSettings must not widen the inherited field to a plain str - that
+    # would silently drop SecretStr's protections (and break .slack_webhook()).
+    from pydantic import SecretStr
+
+    from astk.cli import _DemoSettings
+
+    annotation = _DemoSettings.model_fields["slack_webhook_url"].annotation
+    assert annotation == (SecretStr | None)
 
 
 def test_demo_writes_back_the_same_row_count_it_wrote(monkeypatch, tmp_path):
