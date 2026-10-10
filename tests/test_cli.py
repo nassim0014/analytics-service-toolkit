@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 from typer.testing import CliRunner
 
@@ -102,3 +104,94 @@ def test_version_command_prints_version():
 
     assert result.exit_code == 0
     assert __version__ in result.stdout
+
+
+def test_demo_runs_with_nothing_configured(monkeypatch, tmp_path):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(cli_module.app, ["demo"])
+
+    assert result.exit_code == 0
+    assert "database_url='sqlite:///:memory:'" in result.stdout
+    assert "healthcheck: ok" in result.stdout
+
+
+def test_demo_redacts_the_slack_secret(monkeypatch, tmp_path):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(cli_module.app, ["demo"])
+
+    assert result.exit_code == 0
+    assert "slack_webhook_url='***'" in result.stdout
+    # the real demo webhook string never appears unredacted anywhere in the output
+    assert "hooks.slack.com/services/DEMO" not in result.stdout
+    # also shows the real unwrap-for-use path (.slack_webhook()), not just repr masking
+    assert "webhook unwrap check (dry-run): ok=True" in result.stdout
+
+
+def test_demo_slack_field_is_a_real_secretstr(monkeypatch):
+    # _DemoSettings must not widen the inherited field to a plain str - that
+    # would silently drop SecretStr's protections (and break .slack_webhook()).
+    from pydantic import SecretStr
+
+    from astk.cli import _DemoSettings
+
+    annotation = _DemoSettings.model_fields["slack_webhook_url"].annotation
+    assert annotation == (SecretStr | None)
+
+
+def test_demo_writes_back_the_same_row_count_it_wrote(monkeypatch, tmp_path):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(cli_module.app, ["demo"])
+
+    assert result.exit_code == 0
+    assert "wrote 3 rows" in result.stdout
+    assert "read 3 rows" in result.stdout
+
+
+def test_demo_dedup_suppresses_the_second_call_on_the_same_key(monkeypatch, tmp_path):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(cli_module.app, ["demo"])
+
+    assert result.exit_code == 0
+    assert "-> True   (first call, accepted)" in result.stdout
+    assert "-> False  (second call, same key)" in result.stdout
+
+
+def test_demo_json_flag_writes_a_machine_readable_summary(monkeypatch, tmp_path):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+    out_path = tmp_path / "summary.json"
+
+    result = runner.invoke(cli_module.app, ["demo", "--json", str(out_path)])
+
+    assert result.exit_code == 0
+    assert out_path.exists()
+    summary = json.loads(out_path.read_text())
+    assert summary["settings"]["slack_webhook_url"] == "***"
+    assert summary["database"] == {"wrote": 3, "read": 3, "healthcheck": True}
+    assert summary["dedup"] == {"first": True, "second": False}
+    assert summary["alert"]["ok"] is True
+
+
+def test_demo_runs_twice_in_the_same_process_without_error(monkeypatch, tmp_path):
+    # make_engine caches one Engine per URL, and the in-memory sqlite URL is
+    # identical across invocations - this is the regression the DROP TABLE
+    # guards against.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    first = runner.invoke(cli_module.app, ["demo"])
+    second = runner.invoke(cli_module.app, ["demo"])
+
+    assert first.exit_code == 0
+    assert second.exit_code == 0
+    assert "wrote 3 rows" in second.stdout

@@ -8,11 +8,19 @@ fails at 3am.
 
 from __future__ import annotations
 
+import json
+import logging
+from pathlib import Path
+
 import typer
+from pydantic import SecretStr
+from sqlalchemy import text
 
 from . import __version__
-from .alerts import Alert, ConsoleNotifier, SlackNotifier
-from .db import fetch_df, healthcheck, make_engine
+from .alerts import Alert, ConsoleNotifier, Deduplicator, SlackNotifier
+from .db import fetch_df, healthcheck, make_engine, session_scope
+from .logging import configure_logging
+from .settings import BaseServiceSettings, load_settings
 
 app = typer.Typer(help="astk - shared operational toolkit for this portfolio's Python services.")
 
@@ -85,6 +93,118 @@ def query(
         typer.echo(df.to_csv(index=False))
     else:
         typer.echo(df.to_string(index=False))
+
+
+class _DemoSettings(BaseServiceSettings):
+    """Settings for `astk demo` - deliberately defaults to a config that needs
+    no real database or webhook, so the command works with nothing set up.
+    """
+
+    app_name: str = "astk-demo"
+    database_url: str | None = "sqlite:///:memory:"
+    slack_webhook_url: SecretStr | None = SecretStr("https://hooks.slack.com/services/DEMO/NOT-REAL/0000000000")
+
+
+@app.command()
+def demo(
+    json_path: str | None = typer.Option(
+        None, "--json", help="Also write a machine-readable summary to this path."
+    ),
+) -> None:
+    """Run every astk piece - settings, db, alerts, dedup, logging - end to end
+    against an in-memory SQLite database. Needs no config, no secrets, no
+    network: this is what to run first to see the library actually work.
+    """
+    settings = load_settings(_DemoSettings)
+    run_id = configure_logging(settings.app_name)
+    logging.getLogger("astk.demo").info("astk demo run started")
+
+    engine = make_engine(settings.dsn())
+    demo_rows = [
+        {"id": 1, "name": "Argan Oil 100ml", "margin_pct": 42.5},
+        {"id": 2, "name": "Rosehip Serum 30ml", "margin_pct": 38.1},
+        {"id": 3, "name": "Gift Coffret Trio", "margin_pct": 55.0},
+    ]
+    with session_scope(engine) as session:
+        # DROP first: make_engine caches one Engine per URL (shared StaticPool
+        # for ":memory:"), so a second `demo` call in the same process - every
+        # test run, for one - hits the same in-memory database as the first.
+        session.execute(text("DROP TABLE IF EXISTS demo_products"))
+        session.execute(
+            text("CREATE TABLE demo_products (id INTEGER PRIMARY KEY, name TEXT, margin_pct REAL)")
+        )
+        insert_sql = text(
+            "INSERT INTO demo_products (id, name, margin_pct) VALUES (:id, :name, :margin_pct)"
+        )
+        for row in demo_rows:
+            session.execute(insert_sql, row)
+
+    written = len(demo_rows)
+    read_back = len(fetch_df(engine, "SELECT * FROM demo_products"))
+    is_healthy = healthcheck(engine)
+
+    dedup = Deduplicator(ttl_s=3600)
+    first_send = dedup.should_send("demo:margin-alert")
+    second_send = dedup.should_send("demo:margin-alert")
+
+    lowest = min(demo_rows, key=lambda r: r["margin_pct"])
+    alert_fields = {
+        "lowest_margin_product": lowest["name"],
+        "lowest_margin_pct": str(lowest["margin_pct"]),
+    }
+    result = ConsoleNotifier().send(
+        Alert(
+            title="Demo alert",
+            body="astk demo wiring works end to end",
+            severity="warning",
+            fields=alert_fields,
+        )
+    )
+
+    # .slack_webhook() is the real unwrap path for the SecretStr field - using
+    # dry_run=True here (as `doctor` does) proves it returns a usable URL
+    # without actually posting anywhere.
+    with SlackNotifier(settings.slack_webhook(), dry_run=True) as slack_notifier:
+        slack_check = slack_notifier.send(Alert(title="astk demo", body="webhook unwrap check"))
+
+    typer.echo("")
+    typer.echo("SETTINGS")
+    typer.echo(f"  {settings!r}")
+    typer.echo("")
+    typer.echo("DATABASE")
+    typer.echo(f"  wrote {written} rows")
+    typer.echo(f"  read {read_back} rows")
+    typer.echo(f"  healthcheck: {'ok' if is_healthy else 'FAIL'}")
+    typer.echo("")
+    typer.echo("DEDUP")
+    typer.echo(f"  should_send('demo:margin-alert') -> {first_send}   (first call, accepted)")
+    typer.echo(f"  should_send('demo:margin-alert') -> {second_send}  (second call, same key)")
+    typer.echo("")
+    typer.echo("ALERT")
+    typer.echo(f"  ok={result.ok} attempts={result.attempts} error={result.error}")
+    typer.echo(f"  webhook unwrap check (dry-run): ok={slack_check.ok}")
+    typer.echo("")
+    typer.echo(f"run_id={run_id}")
+
+    if json_path:
+        summary = {
+            "settings": {
+                "app_name": settings.app_name,
+                "env": settings.env,
+                "log_level": settings.log_level,
+                "database_url": settings.dsn(),
+                "slack_webhook_url": "***" if settings.slack_webhook_url else None,
+            },
+            "database": {"wrote": written, "read": read_back, "healthcheck": is_healthy},
+            "dedup": {"first": first_send, "second": second_send},
+            "alert": {"ok": result.ok, "attempts": result.attempts, "error": result.error},
+            "slack_webhook_check": {"ok": slack_check.ok},
+            "run_id": run_id,
+        }
+        Path(json_path).write_text(json.dumps(summary, indent=2))
+        typer.echo(f"\nwrote summary to {json_path}")
+
+    raise typer.Exit(code=0 if is_healthy and result.ok else 1)
 
 
 @app.command()
