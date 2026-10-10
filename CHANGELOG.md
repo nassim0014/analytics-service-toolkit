@@ -22,6 +22,10 @@ Pre-1.0: minor version bumps may break the API; patch bumps never do. See the
   suppression state can be shared across multiple processes/workers), and
   `create_dedup_table(engine)`. `Deduplicator(ttl_s=...)` is unchanged and
   now also accepts `backend=`.
+- `astk demo` CLI command: runs settings loading, a database round-trip,
+  alert dedup, and logging end to end against an in-memory SQLite database,
+  with nothing configured - the fastest way to see the whole library work
+  in one command. `--json PATH` also writes a machine-readable summary.
 
 ## [0.1.0] - 2026-08-27
 

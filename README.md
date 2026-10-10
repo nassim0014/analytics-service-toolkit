@@ -57,7 +57,7 @@ replacement for it.
   tagged with the service name and a per-run id.
 - **`astk` CLI** (Typer) - `astk doctor` checks DB connectivity and Slack
   webhook reachability in one shot; `astk alert`, `astk query`, `astk
-  version`.
+  version`, `astk demo` (see Quick start below).
 
 ## Install
 
@@ -91,9 +91,14 @@ if dedup.should_send("margin:low"):
 ```
 
 ```bash
+astk demo                            # the fastest way to see it work: zero config, zero secrets
 astk doctor --database-url postgresql://... --slack-webhook-url https://hooks.slack.com/...
 streamlit run examples/demo_app.py   # a working end-to-end demo against fake, seeded data
 ```
+
+`astk demo` runs settings loading, a real SQLite round-trip, alert dedup, and
+logging end to end in under a second, with nothing configured - add `--json
+PATH` for a machine-readable summary.
 
 ## What's not built yet
 
